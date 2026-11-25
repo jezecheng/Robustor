@@ -1,8 +1,8 @@
-# 服务器上使用：docker compose pull && docker compose up -d
-# 本地也可以直接 docker compose up --build 验证
+# 本地：docker compose up --build
+# 服务器：由 GitHub Actions 推送源码后在 /opt/robustor 执行 docker compose up -d --build
 services:
   app:
-    image: ${IMAGE:-ghcr.io/jezecheng/robustor:latest}
+    image: robustor:local
     build:
       context: .
     container_name: robustor

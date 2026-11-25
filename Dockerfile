@@ -5,7 +5,8 @@
 FROM node:20-alpine AS web
 WORKDIR /build
 COPY apps/web/package.json apps/web/package-lock.json ./
-RUN npm ci --ignore-scripts
+# 国内构建走 npmmirror，避免从 registry.npmjs.org 拉包超时
+RUN npm config set registry https://registry.npmmirror.com && npm ci --ignore-scripts
 COPY apps/web/ ./
 RUN npm run build
 
@@ -18,13 +19,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     RB_DATA_DIR=/app/data
 WORKDIR /app
 
-# opencv(headless) 仍需要 libGL/libglib
-RUN apt-get update \
+# opencv(headless) 仍需要 libGL/libglib；apt 与 pip 均切到腾讯云内网镜像加速构建
+RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true \
+    && apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY apps/api/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN pip install --no-cache-dir -i https://mirrors.cloud.tencent.com/pypi/simple -r /tmp/requirements.txt
 
 COPY apps/api /app/apps/api
 COPY scripts /app/scripts

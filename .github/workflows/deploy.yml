@@ -1,23 +1,25 @@
 name: build-and-deploy
 
-# 推送 main → 构建镜像并推到 GHCR → SSH 到腾讯云主机（110.42.255.249，用户 ubuntu）
-# → 写入 /opt/robustor/docker-compose.yml → docker compose pull && up -d。
+# 推送 main → 打包源码（仅 git 跟踪文件）→ scp 到腾讯云主机（110.42.255.249，用户 ubuntu）
+# → 在 /opt/robustor 执行 docker compose up -d --build → 健康检查。
+#
+# 选择“服务器本地构建”而非镜像仓库，原因：ghcr.io 到国内的跨境拉取不稳定（曾出现
+# 27MB 层传到 1MB 就 unexpected EOF）。服务器已配置腾讯云/DaoCloud 镜像加速，
+# 且 Dockerfile 内已切 npmmirror / 腾讯云 pypi 源，构建速度可控。
 #
 # 需要在仓库 Settings → Secrets and variables → Actions 配置：
 #   Secrets（必填）
-#     DEPLOY_SSH_KEY   ubuntu 用户的 SSH 私钥（例如 ~/.ssh/id_ed25519 的内容）
+#     DEPLOY_SSH_KEY   ubuntu 用户的 SSH 私钥
 #   Secrets（可选）
 #     DEPLOY_PORT      默认 22
-#     GHCR_TOKEN       若 GHCR 镜像包为私有，需一个带 read:packages 权限的 PAT；
-#                      把镜像包设为 Public 后可省略
 #     VLM_API_KEY      启用真实 VLM 识别时提供
 #   Variables（可选）
 #     VLM_BASE_URL / VLM_MODEL / LAYOUT_PROVIDER / OCR_PROVIDER / APP_PORT
 #
 # 服务器前置条件：
-#   1. ubuntu 用户可免密 sudo，且已安装 docker + docker compose 插件
+#   1. ubuntu 用户可免密 sudo，已安装 docker + docker compose 插件
 #   2. 腾讯云安全组放行 8888/TCP
-#   3. /opt/robustor 首次由本工作流创建并 chown 给 ubuntu
+#   3. /opt/robustor 由本工作流创建；./data 为持久化数据，部署时保留
 
 on:
   push:
@@ -29,78 +31,36 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/robustor
   APP_PORT: ${{ vars.APP_PORT || '8888' }}
   DEPLOY_HOST: 110.42.255.249
   DEPLOY_USER: ubuntu
   DEPLOY_PATH: /opt/robustor
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Login GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare remote directory
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ env.DEPLOY_HOST }}
-          username: ${{ env.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || 22 }}
-          script: |
-            set -e
-            sudo mkdir -p "${{ env.DEPLOY_PATH }}"
-            sudo chown -R "${{ env.DEPLOY_USER }}" "${{ env.DEPLOY_PATH }}"
+      - name: Package source
+        run: git archive --format=tar.gz -o robustor-release.tar.gz HEAD
 
-      - name: Upload compose file
+      - name: Upload source
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ env.DEPLOY_HOST }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: docker-compose.yml
-          target: ${{ env.DEPLOY_PATH }}
+          source: robustor-release.tar.gz
+          target: /tmp
           overwrite: true
 
-      - name: Deploy over SSH
+      - name: Build and deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           APP_PORT: ${{ env.APP_PORT }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           VLM_API_KEY: ${{ secrets.VLM_API_KEY }}
           VLM_BASE_URL: ${{ vars.VLM_BASE_URL }}
           VLM_MODEL: ${{ vars.VLM_MODEL }}
@@ -111,39 +71,50 @@ jobs:
           username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          envs: IMAGE,APP_PORT,GHCR_USER,GHCR_TOKEN,VLM_API_KEY,VLM_BASE_URL,VLM_MODEL,LAYOUT_PROVIDER,OCR_PROVIDER
+          command_timeout: 35m
+          envs: APP_PORT,VLM_API_KEY,VLM_BASE_URL,VLM_MODEL,LAYOUT_PROVIDER,OCR_PROVIDER
           script: |
             set -e
-            cd "${{ env.DEPLOY_PATH }}"
+            DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
 
             if ! sudo docker compose version >/dev/null 2>&1; then
-              echo "服务器缺少 docker compose 插件，请先安装：sudo apt install docker-compose-plugin" >&2
+              echo "服务器缺少 docker compose 插件：sudo apt install docker-compose-plugin" >&2
               exit 1
             fi
 
-            if [ -n "$GHCR_TOKEN" ]; then
-              echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            fi
+            sudo mkdir -p "$DEPLOY_PATH"
+            sudo chown -R "${{ env.DEPLOY_USER }}" "$DEPLOY_PATH"
+            cd "$DEPLOY_PATH"
 
-            sudo env \
-              IMAGE="$IMAGE" \
-              APP_PORT="$APP_PORT" \
-              VLM_API_KEY="$VLM_API_KEY" \
-              VLM_BASE_URL="$VLM_BASE_URL" \
-              VLM_MODEL="$VLM_MODEL" \
-              LAYOUT_PROVIDER="$LAYOUT_PROVIDER" \
-              OCR_PROVIDER="$OCR_PROVIDER" \
-              docker compose pull
+            # 清除旧源码但保留 data（sqlite 与上传的图片）
+            find . -maxdepth 1 -mindepth 1 ! -name data -exec rm -rf {} +
+            tar -xzf /tmp/robustor-release.tar.gz -C .
+            rm -f /tmp/robustor-release.tar.gz
 
-            sudo env \
-              IMAGE="$IMAGE" \
-              APP_PORT="$APP_PORT" \
-              VLM_API_KEY="$VLM_API_KEY" \
-              VLM_BASE_URL="$VLM_BASE_URL" \
-              VLM_MODEL="$VLM_MODEL" \
-              LAYOUT_PROVIDER="$LAYOUT_PROVIDER" \
-              OCR_PROVIDER="$OCR_PROVIDER" \
-              docker compose up -d --remove-orphans
+            # 组装 .env（不落盘到仓库，仅服务器本地读取）
+            {
+              echo "APP_PORT=$APP_PORT"
+              echo "LAYOUT_PROVIDER=${LAYOUT_PROVIDER:-mock}"
+              echo "OCR_PROVIDER=${OCR_PROVIDER:-mock}"
+              echo "VLM_API_KEY=$VLM_API_KEY"
+              echo "VLM_BASE_URL=$VLM_BASE_URL"
+              echo "VLM_MODEL=$VLM_MODEL"
+            } > .env
+            chmod 600 .env
 
+            sudo docker compose up -d --build --remove-orphans
+
+            # 清理悬空镜像，控制磁盘占用
             sudo docker image prune -f
-            curl -fsS "http://127.0.0.1:${APP_PORT}/api/health" && echo "healthy"
+
+            for i in $(seq 1 20); do
+              if curl -fsS "http://127.0.0.1:${APP_PORT}/api/health"; then
+                echo ""
+                echo "healthy"
+                exit 0
+              fi
+              sleep 3
+            done
+            echo "健康检查失败，最近日志：" >&2
+            sudo docker logs --tail 50 robustor >&2
+            exit 1
