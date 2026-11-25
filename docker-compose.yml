@@ -1,0 +1,21 @@
+# 服务器上使用：docker compose pull && docker compose up -d
+# 本地也可以直接 docker compose up --build 验证
+services:
+  app:
+    image: ${IMAGE:-ghcr.io/your-org/robustor:latest}
+    build:
+      context: .
+    container_name: robustor
+    ports:
+      - "${APP_PORT:-8888}:8888"
+    environment:
+      RB_PORT: "8888"
+      LAYOUT_PROVIDER: ${LAYOUT_PROVIDER:-mock}
+      OCR_PROVIDER: ${OCR_PROVIDER:-mock}
+      # 只在需要真实 VLM 识别时提供；不要写进镜像
+      VLM_API_KEY: ${VLM_API_KEY:-}
+      VLM_BASE_URL: ${VLM_BASE_URL:-}
+      VLM_MODEL: ${VLM_MODEL:-}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

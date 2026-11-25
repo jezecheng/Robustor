@@ -1,0 +1,53 @@
+# ---- 系统与缓存 ----
+.DS_Store
+*.pyc
+__pycache__/
+.venv/
+node_modules/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+apps/web/coverage/
+*.log
+
+# ---- 凭据 / 密钥（绝不入库）----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+id_rsa*
+id_ed25519*
+secrets/
+.secrets/
+credentials.json
+credentials*.json
+*token*.json
+
+# ---- 本机测试产物 / 运行数据（不上传）----
+data/
+.screenshots/
+screenshots/
+tmp/
+*.tmp
+*.bak
+apps/api/openapi.json
+apps/api/app/fixtures/demo/*.jpg
+apps/api/app/fixtures/canned.json
+
+# ---- 内部规划文档（不上传）----
+PLANNING.md
+planning/
+docs/planning/
+*.plan.md
+*_PLAN.md
