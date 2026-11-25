@@ -347,11 +347,7 @@ export interface paths {
         };
         /** Read Ai Config */
         get: operations["read_ai_config_api_ai_config_get"];
-        /**
-         * Update Ai Config
-         * @description 整表覆盖：显式传 null 的字段表示清除（回落 env/默认值）。
-         */
-        put: operations["update_ai_config_api_ai_config_put"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -359,25 +355,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ai-keys": {
+    "/api/ai-providers": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Ai Keys */
-        get: operations["list_ai_keys_api_ai_keys_get"];
+        get?: never;
         put?: never;
-        /** Create Ai Key */
-        post: operations["create_ai_key_api_ai_keys_post"];
+        /** Create Ai Provider */
+        post: operations["create_ai_provider_api_ai_providers_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/ai-keys/{key_id}": {
+    "/api/ai-providers/{provider_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -387,12 +382,12 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Ai Key */
-        delete: operations["delete_ai_key_api_ai_keys__key_id__delete"];
+        /** Delete Ai Provider */
+        delete: operations["delete_ai_provider_api_ai_providers__provider_id__delete"];
         options?: never;
         head?: never;
-        /** Patch Ai Key */
-        patch: operations["patch_ai_key_api_ai_keys__key_id__patch"];
+        /** Patch Ai Provider */
+        patch: operations["patch_ai_provider_api_ai_providers__provider_id__patch"];
         trace?: never;
     };
     "/api/health": {
@@ -418,16 +413,10 @@ export interface components {
     schemas: {
         /** AiConfigOut */
         AiConfigOut: {
-            /** Provider */
-            provider?: ("mock" | "vlm") | null;
-            /** Base Url */
-            base_url?: string | null;
-            /** Model */
-            model?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
-            /** Keys */
-            keys?: components["schemas"]["AiKeyOut"][];
+            /** Providers */
+            providers?: components["schemas"]["AiProviderOut"][];
+            /** Active Provider Id */
+            active_provider_id?: string | null;
             /**
              * Effective Provider
              * @enum {string}
@@ -448,39 +437,33 @@ export interface components {
              * @enum {string}
              */
             api_key_source: "db" | "env" | "none";
-            /** Active Key Id */
-            active_key_id?: string | null;
         };
-        /**
-         * AiConfigPatch
-         * @description provider/base_url/model 显式传 null 表示清除该字段（回落到环境变量/默认值）。
-         */
-        AiConfigPatch: {
-            /** Provider */
-            provider?: ("mock" | "vlm") | null;
-            /** Base Url */
-            base_url?: string | null;
-            /** Model */
-            model?: string | null;
-        };
-        /** AiKeyIn */
-        AiKeyIn: {
+        /** AiProviderIn */
+        AiProviderIn: {
             /**
              * Name
              * @default
              */
             name: string;
+            /** Base Url */
+            base_url: string;
+            /** Model */
+            model: string;
             /** Api Key */
             api_key: string;
         };
-        /** AiKeyOut */
-        AiKeyOut: {
+        /** AiProviderOut */
+        AiProviderOut: {
             /** Id */
             id: string;
             /** Name */
             name: string;
-            /** Api Key Masked */
-            api_key_masked: string;
+            /** Base Url */
+            base_url: string;
+            /** Model */
+            model: string;
+            /** Has Key */
+            has_key: boolean;
             /** Is Active */
             is_active: boolean;
             /**
@@ -488,11 +471,20 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
-        /** AiKeyPatch */
-        AiKeyPatch: {
+        /** AiProviderPatch */
+        AiProviderPatch: {
             /** Name */
             name?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Model */
+            model?: string | null;
             /** Api Key */
             api_key?: string | null;
             /** Is Active */
@@ -1906,7 +1898,7 @@ export interface operations {
             };
         };
     };
-    update_ai_config_api_ai_config_put: {
+    create_ai_provider_api_ai_providers_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1915,9 +1907,40 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiConfigPatch"];
+                "application/json": components["schemas"]["AiProviderIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConfigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_ai_provider_api_ai_providers__provider_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1939,100 +1962,18 @@ export interface operations {
             };
         };
     };
-    list_ai_keys_api_ai_keys_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiKeyOut"][];
-                };
-            };
-        };
-    };
-    create_ai_key_api_ai_keys_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AiKeyIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiKeyOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_ai_key_api_ai_keys__key_id__delete: {
+    patch_ai_provider_api_ai_providers__provider_id__patch: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                key_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    patch_ai_key_api_ai_keys__key_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                key_id: string;
+                provider_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiKeyPatch"];
+                "application/json": components["schemas"]["AiProviderPatch"];
             };
         };
         responses: {
@@ -2042,7 +1983,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AiKeyOut"];
+                    "application/json": components["schemas"]["AiConfigOut"];
                 };
             };
             /** @description Validation Error */

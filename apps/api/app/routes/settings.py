@@ -7,16 +7,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..ai_config import AI_CONFIG_ID, effective, get_row, mask_key
+from ..ai_config import effective
 from ..crypto import decrypt, encrypt
 from ..db import get_session
-from ..models import AiConfig, AiKey, InkProfile
+from ..models import AiProvider, InkProfile
 from ..schemas import (
     AiConfigOut,
-    AiConfigPatch,
-    AiKeyIn,
-    AiKeyOut,
-    AiKeyPatch,
+    AiProviderIn,
+    AiProviderOut,
+    AiProviderPatch,
     InkProfileIn,
     InkProfileOut,
     InkProfilePatch,
@@ -97,37 +96,42 @@ def patch_ink_profile(
 # ---------------------------------------------------------------- AI API 配置
 
 
-def _key_out(key: AiKey) -> AiKeyOut:
-    return AiKeyOut(
-        id=key.id,
-        name=key.name,
-        api_key_masked=mask_key(decrypt(key.api_key)),
-        is_active=key.is_active,
-        created_at=key.created_at,
+def _provider_out(provider: AiProvider) -> AiProviderOut:
+    return AiProviderOut(
+        id=provider.id,
+        name=provider.name,
+        base_url=provider.base_url,
+        model=provider.model,
+        has_key=bool(decrypt(provider.api_key)),
+        is_active=provider.is_active,
+        created_at=provider.created_at,
+        updated_at=provider.updated_at,
     )
 
 
-def _ai_config_out(session: Session, row: AiConfig | None = None) -> AiConfigOut:
-    row = row if row is not None else get_row(session)
+def _ai_config_out(session: Session) -> AiConfigOut:
     cfg = effective(session)
-    keys = (
-        session.query(AiKey)
-        .order_by(AiKey.is_active.desc(), AiKey.created_at)
+    providers = (
+        session.query(AiProvider)
+        .order_by(AiProvider.is_active.desc(), AiProvider.created_at)
         .all()
     )
     return AiConfigOut(
-        provider=row.provider if row else None,
-        base_url=row.base_url if row else None,
-        model=row.model if row else None,
-        updated_at=row.updated_at if row else None,
-        keys=[_key_out(key) for key in keys],
+        providers=[_provider_out(p) for p in providers],
+        active_provider_id=cfg["provider_id"],
         effective_provider=cfg["provider"],
         effective_base_url=cfg["base_url"],
         effective_model=cfg["model"],
         effective_api_key_set=bool(cfg["api_key"]),
         api_key_source=cfg["api_key_source"],
-        active_key_id=cfg["key_id"],
     )
+
+
+def _clean_base_url(value: str) -> str:
+    base_url = value.strip()
+    if not base_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="base_url 需以 http:// 或 https:// 开头")
+    return base_url
 
 
 @router.get("/ai-config", response_model=AiConfigOut)
@@ -135,91 +139,75 @@ def read_ai_config(session: Session = Depends(get_session)) -> AiConfigOut:
     return _ai_config_out(session)
 
 
-@router.put("/ai-config", response_model=AiConfigOut)
-def update_ai_config(
-    payload: AiConfigPatch, session: Session = Depends(get_session)
+@router.post("/ai-providers", response_model=AiConfigOut, status_code=201)
+def create_ai_provider(
+    payload: AiProviderIn, session: Session = Depends(get_session)
 ) -> AiConfigOut:
-    """整表覆盖：显式传 null 的字段表示清除（回落 env/默认值）。"""
-    row = get_row(session) or AiConfig(id=AI_CONFIG_ID)
-    fields = payload.model_fields_set
-
-    if "provider" in fields:
-        row.provider = payload.provider
-
-    if "base_url" in fields:
-        base_url = (payload.base_url or "").strip()
-        if base_url and not base_url.startswith(("http://", "https://")):
-            raise HTTPException(status_code=400, detail="base_url 需以 http:// 或 https:// 开头")
-        row.base_url = base_url or None
-
-    if "model" in fields:
-        row.model = (payload.model or "").strip() or None
-
-    session.add(row)
-    session.commit()
-    session.refresh(row)
-    return _ai_config_out(session, row)
-
-
-# ---------------------------------------------------------------- AI API Key 池
-
-
-def _deactivate_others(session: Session, keep_id: str) -> None:
-    session.query(AiKey).filter(AiKey.id != keep_id).update(
-        {AiKey.is_active: False}, synchronize_session=False
-    )
-
-
-@router.get("/ai-keys", response_model=list[AiKeyOut])
-def list_ai_keys(session: Session = Depends(get_session)) -> list[AiKeyOut]:
-    keys = session.query(AiKey).order_by(AiKey.is_active.desc(), AiKey.created_at).all()
-    return [_key_out(key) for key in keys]
-
-
-@router.post("/ai-keys", response_model=AiKeyOut, status_code=201)
-def create_ai_key(payload: AiKeyIn, session: Session = Depends(get_session)) -> AiKeyOut:
     api_key = payload.api_key.strip()
+    model = payload.model.strip()
     if not api_key:
         raise HTTPException(status_code=400, detail="api_key 不能为空")
-    name = payload.name.strip() or f"Key {session.query(AiKey).count() + 1}"
-    # 第一条 Key 自动激活，避免新增后还要多点一次
-    make_active = session.query(AiKey).filter(AiKey.is_active.is_(True)).count() == 0
-    key = AiKey(name=name[:128], api_key=encrypt(api_key), is_active=make_active)
-    session.add(key)
+    if not model:
+        raise HTTPException(status_code=400, detail="model 不能为空")
+
+    count = session.query(AiProvider).count()
+    name = payload.name.strip()[:128] or f"配置 {count + 1}"
+    # 第一条配置自动设为使用中，避免新增后还要多点一次
+    make_active = session.query(AiProvider).filter(AiProvider.is_active.is_(True)).count() == 0
+    session.add(
+        AiProvider(
+            name=name,
+            base_url=_clean_base_url(payload.base_url),
+            model=model[:128],
+            api_key=encrypt(api_key),
+            is_active=make_active,
+        )
+    )
     session.commit()
-    session.refresh(key)
-    return _key_out(key)
+    return _ai_config_out(session)
 
 
-@router.patch("/ai-keys/{key_id}", response_model=AiKeyOut)
-def patch_ai_key(
-    key_id: str, payload: AiKeyPatch, session: Session = Depends(get_session)
-) -> AiKeyOut:
-    key = session.get(AiKey, key_id)
-    if key is None:
-        raise HTTPException(status_code=404, detail="Key 不存在")
+@router.patch("/ai-providers/{provider_id}", response_model=AiConfigOut)
+def patch_ai_provider(
+    provider_id: str, payload: AiProviderPatch, session: Session = Depends(get_session)
+) -> AiConfigOut:
+    provider = session.get(AiProvider, provider_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="配置不存在")
 
     if payload.name is not None:
-        key.name = payload.name.strip()[:128] or key.name
-    if payload.api_key is not None:
-        api_key = payload.api_key.strip()
-        if not api_key:
-            raise HTTPException(status_code=400, detail="api_key 不能为空")
-        key.api_key = encrypt(api_key)
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name 不能为空")
+        provider.name = name[:128]
+    if payload.base_url is not None:
+        provider.base_url = _clean_base_url(payload.base_url)
+    if payload.model is not None:
+        model = payload.model.strip()
+        if not model:
+            raise HTTPException(status_code=400, detail="model 不能为空")
+        provider.model = model[:128]
+    # 不传或留空都表示保持原 Key
+    if payload.api_key:
+        provider.api_key = encrypt(payload.api_key.strip())
     if payload.is_active is not None:
         if payload.is_active:
-            _deactivate_others(session, key.id)
-        key.is_active = payload.is_active
+            session.query(AiProvider).filter(AiProvider.id != provider.id).update(
+                {AiProvider.is_active: False}, synchronize_session=False
+            )
+        provider.is_active = payload.is_active
 
     session.commit()
-    session.refresh(key)
-    return _key_out(key)
+    return _ai_config_out(session)
 
 
-@router.delete("/ai-keys/{key_id}", status_code=204)
-def delete_ai_key(key_id: str, session: Session = Depends(get_session)) -> None:
-    key = session.get(AiKey, key_id)
-    if key is None:
-        raise HTTPException(status_code=404, detail="Key 不存在")
-    session.delete(key)
+@router.delete("/ai-providers/{provider_id}", response_model=AiConfigOut)
+def delete_ai_provider(
+    provider_id: str, session: Session = Depends(get_session)
+) -> AiConfigOut:
+    provider = session.get(AiProvider, provider_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="配置不存在")
+    session.delete(provider)
     session.commit()
+    return _ai_config_out(session)

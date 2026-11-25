@@ -7,22 +7,21 @@ import { Tag } from '../ui/Tag'
 import { useDocuments } from '../api/queries/documents'
 import {
   useAiConfig,
-  useCreateAiKey,
+  useCreateAiProvider,
   useCreateInkProfile,
   useCreateTag,
-  useDeleteAiKey,
+  useDeleteAiProvider,
   useInkProfiles,
   useMergeTags,
-  usePatchAiKey,
+  usePatchAiProvider,
   usePatchInkProfile,
   usePendingTags,
   useReidentifyDocument,
   useTags,
-  useUpdateAiConfig,
 } from '../api/queries/settings'
 import type { components } from '../api/types'
 
-type AiConfigPatch = components['schemas']['AiConfigPatch']
+type AiProviderOut = components['schemas']['AiProviderOut']
 type InkProfileOut = components['schemas']['InkProfileOut']
 type TagOut = components['schemas']['TagOut']
 
@@ -536,12 +535,6 @@ function TagsTab() {
 
 // ---------------------------------------------------------------- Tab 3 AI API
 
-const PROVIDER_OPTIONS = [
-  { value: '', label: '跟随环境变量 / 默认' },
-  { value: 'mock', label: 'mock（离线假数据）' },
-  { value: 'vlm', label: 'vlm（云端视觉模型）' },
-] as const
-
 const KEY_SOURCE_LABEL: Record<string, string> = {
   db: '数据库',
   env: '环境变量',
@@ -550,91 +543,166 @@ const KEY_SOURCE_LABEL: Record<string, string> = {
 
 function AiApiTab() {
   const config = useAiConfig()
-  const update = useUpdateAiConfig()
-  const createKey = useCreateAiKey()
-  const patchKey = usePatchAiKey()
-  const deleteKey = useDeleteAiKey()
+  const createProvider = useCreateAiProvider()
+  const patchProvider = usePatchAiProvider()
+  const deleteProvider = useDeleteAiProvider()
 
-  const [provider, setProvider] = useState<'' | 'mock' | 'vlm'>('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [name, setName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
-  const [newKeyName, setNewKeyName] = useState('')
-  const [newKeyValue, setNewKeyValue] = useState('')
+  const [apiKey, setApiKey] = useState('')
   const [notice, setNotice] = useState('')
-  const [keyNotice, setKeyNotice] = useState('')
 
-  useEffect(() => {
-    const data = config.data
-    if (!data) return
-    setProvider(data.provider ?? '')
-    setBaseUrl(data.base_url ?? '')
-    setModel(data.model ?? '')
-  }, [config.data])
-
-  const save = () => {
-    if (config.isLoading || update.isPending) return
-    const payload: AiConfigPatch = {
-      provider: provider || null,
-      base_url: baseUrl.trim() || null,
-      model: model.trim() || null,
-    }
-    update.mutate(payload, {
-      onSuccess: () => setNotice('已保存，下一个识别任务立即生效。'),
-    })
+  const resetForm = () => {
+    setEditingId(null)
+    setName('')
+    setBaseUrl('')
+    setModel('')
+    setApiKey('')
   }
 
-  const addKey = () => {
-    const value = newKeyValue.trim()
-    if (!value || createKey.isPending) return
-    createKey.mutate(
-      { name: newKeyName.trim(), api_key: value },
-      {
-        onSuccess: (key) => {
-          setNewKeyName('')
-          setNewKeyValue('')
-          setKeyNotice(
-            key.is_active ? `已添加「${key.name}」并设为当前使用。` : `已添加「${key.name}」。`,
-          )
+  const startEdit = (provider: AiProviderOut) => {
+    setEditingId(provider.id)
+    setName(provider.name)
+    setBaseUrl(provider.base_url)
+    setModel(provider.model)
+    setApiKey('')
+    setNotice('')
+  }
+
+  const saving = createProvider.isPending || patchProvider.isPending
+  const canSave =
+    name.trim().length > 0 &&
+    baseUrl.trim().length > 0 &&
+    model.trim().length > 0 &&
+    (editingId !== null || apiKey.trim().length > 0)
+
+  const save = () => {
+    if (!canSave || saving) return
+    const body = { name: name.trim(), base_url: baseUrl.trim(), model: model.trim() }
+    if (editingId) {
+      patchProvider.mutate(
+        { id: editingId, patch: { ...body, api_key: apiKey.trim() || undefined } },
+        {
+          onSuccess: () => {
+            setNotice(`已更新「${body.name}」，下一个识别任务立即生效。`)
+            resetForm()
+          },
+          onError: () => setNotice('保存失败，请检查 Base URL 与必填项。'),
         },
+      )
+      return
+    }
+    createProvider.mutate(
+      { ...body, api_key: apiKey.trim() },
+      {
+        onSuccess: (data) => {
+          const active = data.providers?.find((item) => item.is_active)
+          setNotice(
+            active ? `已保存「${active.name}」并设为当前使用。` : `已保存「${body.name}」。`,
+          )
+          resetForm()
+        },
+        onError: () => setNotice('保存失败，请检查 Base URL 与必填项。'),
       },
     )
   }
 
-  const activateKey = (id: string) => {
-    if (patchKey.isPending) return
-    patchKey.mutate(
-      { id, patch: { is_active: true } },
-      { onSuccess: (key) => setKeyNotice(`已切换到「${key.name}」。`) },
+  const activate = (provider: AiProviderOut) => {
+    if (saving) return
+    patchProvider.mutate(
+      { id: provider.id, patch: { is_active: true } },
+      { onSuccess: () => setNotice(`已切换到「${provider.name}」。`) },
     )
   }
 
-  const removeKey = (id: string, name: string) => {
-    if (deleteKey.isPending) return
-    if (!window.confirm(`确认删除 Key「${name}」？删除后无法恢复。`)) return
-    deleteKey.mutate(id, { onSuccess: () => setKeyNotice(`已删除「${name}」。`) })
+  const remove = (provider: AiProviderOut) => {
+    if (deleteProvider.isPending) return
+    if (!window.confirm(`确认删除配置「${provider.name}」？删除后无法恢复。`)) return
+    deleteProvider.mutate(provider.id, {
+      onSuccess: () => {
+        setNotice(`已删除「${provider.name}」。`)
+        if (editingId === provider.id) resetForm()
+      },
+    })
   }
 
   const data = config.data
-  const keys = data?.keys ?? []
+  const providers = data?.providers ?? []
   const vlmWithoutKey = data?.effective_provider === 'vlm' && !data.effective_api_key_set
 
   return (
     <div className="stack">
-      <Card title="AI API 配置" subtitle="保存到本地数据库，下一次识别任务读取时立即生效，无需重启。">
+      <Card
+        title="AI 配置"
+        subtitle="名称、Base URL、模型、Key 作为一个整体保存；只有标注「使用中」的一条参与识别。"
+      >
+        <div className="stack" style={{ gap: 'var(--space-3)' }}>
+          {!providers.length ? (
+            <div className="muted">还没有保存配置，可在下方新增；未配置时回落到环境变量。</div>
+          ) : (
+            providers.map((provider) => (
+              <div
+                key={provider.id}
+                className="row-wrap"
+                style={{ paddingBottom: 8, borderBottom: '1px solid var(--line)' }}
+              >
+                <strong style={{ minWidth: 110 }}>{provider.name}</strong>
+                <span
+                  className="mono muted"
+                  title={provider.base_url}
+                  style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {provider.base_url}
+                </span>
+                <Tag>{provider.model}</Tag>
+                {provider.is_active && <Tag>使用中</Tag>}
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {provider.has_key ? 'Key 已保存' : '未设置 Key'}
+                </span>
+                <div className="grow" />
+                <Button size="sm" disabled={saving} onClick={() => startEdit(provider)}>
+                  编辑
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={provider.is_active || saving}
+                  onClick={() => activate(provider)}
+                >
+                  使用
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={deleteProvider.isPending}
+                  onClick={() => remove(provider)}
+                >
+                  删除
+                </Button>
+              </div>
+            ))
+          )}
+          {notice && (
+            <span className="mono" style={{ color: 'var(--ok)' }}>
+              {notice}
+            </span>
+          )}
+        </div>
+      </Card>
+
+      <Card
+        title={editingId ? `编辑配置${name ? `：${name}` : ''}` : '新增配置'}
+        subtitle="保存后 Key 不再显示、无法查看；更换需重新填写覆盖。"
+      >
         <div className="stack" style={{ gap: 'var(--space-3)' }}>
           <label className="stack" style={{ gap: 4 }}>
-            <span className="muted">识别 provider</span>
-            <select
-              value={provider}
-              onChange={(event) => setProvider(event.target.value as '' | 'mock' | 'vlm')}
+            <span className="muted">名称</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="例如 主力模型 / 备用 Key"
               style={{ ...inputStyle, maxWidth: 320 }}
-            >
-              {PROVIDER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
           </label>
 
           <label className="stack" style={{ gap: 4 }}>
@@ -642,7 +710,7 @@ function AiApiTab() {
             <input
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
-              placeholder="留空则用环境变量或 https://api.openai.com/v1/chat/completions"
+              placeholder="https://api.openai.com/v1/chat/completions"
               style={inputStyle}
             />
           </label>
@@ -652,88 +720,33 @@ function AiApiTab() {
             <input
               value={model}
               onChange={(event) => setModel(event.target.value)}
-              placeholder="留空则用环境变量或 gpt-4o-mini"
+              placeholder="gpt-4o-mini"
               style={{ ...inputStyle, maxWidth: 320 }}
             />
           </label>
 
-          <div className="row-wrap">
-            <Button variant="primary" onClick={save} disabled={config.isLoading || update.isPending}>
-              {update.isPending ? '保存中…' : '保存配置'}
-            </Button>
-            {notice && (
-              <span className="mono" style={{ color: 'var(--ok)' }}>
-                {notice}
-              </span>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      <Card title="API Key 池" subtitle="可存多条，只有标注「使用中」的那条参与识别；全部未激活时回落到环境变量。">
-        <div className="stack" style={{ gap: 'var(--space-3)' }}>
-          {!keys.length ? (
-            <div className="muted">还没有保存 Key，可在下方添加。</div>
-          ) : (
-            keys.map((key) => (
-              <div
-                key={key.id}
-                className="row-wrap"
-                style={{ paddingBottom: 8, borderBottom: '1px solid var(--line)' }}
-              >
-                <strong style={{ minWidth: 120 }}>{key.name}</strong>
-                <span className="mono muted">{key.api_key_masked}</span>
-                {key.is_active && <Tag>使用中</Tag>}
-                <div className="grow" />
-                <Button
-                  size="sm"
-                  disabled={key.is_active || patchKey.isPending}
-                  onClick={() => activateKey(key.id)}
-                >
-                  使用
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={deleteKey.isPending}
-                  onClick={() => removeKey(key.id, key.name)}
-                >
-                  删除
-                </Button>
-              </div>
-            ))
-          )}
-
-          <div className="row-wrap" style={{ paddingTop: 'var(--space-2)' }}>
-            <input
-              value={newKeyName}
-              onChange={(event) => setNewKeyName(event.target.value)}
-              placeholder="名称（留空自动编号）"
-              style={{ ...inputStyle, width: 180 }}
-            />
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="muted">API Key</span>
             <input
               type="password"
-              value={newKeyValue}
-              onChange={(event) => setNewKeyValue(event.target.value)}
-              autoComplete="off"
-              placeholder="粘贴 API Key"
-              style={{ ...inputStyle, minWidth: 320 }}
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              autoComplete="new-password"
+              placeholder={editingId ? '已保存，留空则不修改' : '粘贴 API Key'}
+              style={inputStyle}
             />
-            <Button
-              variant="primary"
-              onClick={addKey}
-              disabled={!newKeyValue.trim() || createKey.isPending}
-            >
-              {createKey.isPending ? '添加中…' : '添加 Key'}
+          </label>
+
+          <div className="row-wrap">
+            <Button variant="primary" onClick={save} disabled={!canSave || saving}>
+              {saving ? '保存中…' : editingId ? '保存修改' : '保存配置'}
             </Button>
-            {keyNotice && (
-              <span className="mono" style={{ color: 'var(--ok)' }}>
-                {keyNotice}
-              </span>
+            {editingId && (
+              <Button onClick={resetForm} disabled={saving}>
+                取消
+              </Button>
             )}
           </div>
-          <span className="muted" style={{ fontSize: 12 }}>
-            第一条 Key 会自动设为使用中；接口只回传掩码，不回传明文。
-          </span>
         </div>
       </Card>
 

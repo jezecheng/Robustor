@@ -23,11 +23,10 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
-    from .ai_config import encrypt_plaintext_keys, migrate_legacy_key
+    from .ai_config import migrate_and_secure
 
     with SessionLocal() as session:
-        migrate_legacy_key(session)
-        encrypt_plaintext_keys(session)
+        migrate_and_secure(session)
 
 
 def get_session() -> Iterator[Session]:

@@ -269,40 +269,35 @@ class InkProfileOut(ORMModel):
 # ---------------------------------------------------------------- AI API 配置
 
 
-class AiConfigPatch(BaseModel):
-    """provider/base_url/model 显式传 null 表示清除该字段（回落到环境变量/默认值）。"""
-
-    provider: AiProvider | None = None
-    base_url: str | None = None
-    model: str | None = None
-
-
-class AiKeyIn(BaseModel):
+class AiProviderIn(BaseModel):
     name: str = ""
+    base_url: str = Field(min_length=1)
+    model: str = Field(min_length=1)
     api_key: str = Field(min_length=1)
 
 
-class AiKeyPatch(BaseModel):
+class AiProviderPatch(BaseModel):
     name: str | None = None
-    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    api_key: str | None = None  # 不传或留空表示保持原 Key
     is_active: bool | None = None
 
 
-class AiKeyOut(BaseModel):
+class AiProviderOut(BaseModel):
     id: str
     name: str
-    api_key_masked: str
+    base_url: str
+    model: str
+    has_key: bool
     is_active: bool
     created_at: datetime
+    updated_at: datetime
 
 
 class AiConfigOut(BaseModel):
-    # 数据库已保存的值（null = 跟随环境变量/默认值）
-    provider: AiProvider | None = None
-    base_url: str | None = None
-    model: str | None = None
-    updated_at: datetime | None = None
-    keys: list[AiKeyOut] = Field(default_factory=list)
+    providers: list[AiProviderOut] = Field(default_factory=list)
+    active_provider_id: str | None = None
 
     # 实际生效值（数据库 > 环境变量 > 默认值）
     effective_provider: AiProvider
@@ -310,4 +305,3 @@ class AiConfigOut(BaseModel):
     effective_model: str
     effective_api_key_set: bool = False
     api_key_source: Literal["db", "env", "none"] = "none"
-    active_key_id: str | None = None
