@@ -16,6 +16,8 @@ services:
       VLM_API_KEY: ${VLM_API_KEY:-}
       VLM_BASE_URL: ${VLM_BASE_URL:-}
       VLM_MODEL: ${VLM_MODEL:-}
+      # Key 加密主密钥；留空则在 data/secret.key 自动生成并持久化
+      RB_SECRET_KEY: ${RB_SECRET_KEY:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

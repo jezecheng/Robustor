@@ -1,4 +1,4 @@
-"""ORM 表定义 —— 全项目唯一来源（12 张表）。其他 WP 只读，禁止修改。"""
+"""ORM 表定义 —— 全项目唯一来源（14 张表）。其他 WP 只读，禁止修改。"""
 
 from __future__ import annotations
 
@@ -160,6 +160,31 @@ class Review(Base):
     interval_days: Mapped[int] = mapped_column(Integer, default=1)
     due_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     history_json: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class AiConfig(Base):
+    """AI provider 配置，单行（id 恒为 default）。api_key 为旧版单 Key 字段，仅用于迁移。"""
+
+    __tablename__ = "ai_config"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default="default")
+    provider: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class AiKey(Base):
+    """AI API Key 池：api_key 存 Fernet 密文；is_active 为 true 的那条参与识别。"""
+
+    __tablename__ = "ai_key"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    api_key: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Job(Base):

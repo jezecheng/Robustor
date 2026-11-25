@@ -13,6 +13,7 @@ name: build-and-deploy
 #   Secrets（可选）
 #     DEPLOY_PORT      默认 22
 #     VLM_API_KEY      启用真实 VLM 识别时提供
+#     RB_SECRET_KEY    AI Key 加密主密钥（可选；留空则在 data/secret.key 自动生成）
 #   Variables（可选）
 #     VLM_BASE_URL / VLM_MODEL / LAYOUT_PROVIDER / OCR_PROVIDER / APP_PORT
 #
@@ -66,13 +67,14 @@ jobs:
           VLM_MODEL: ${{ vars.VLM_MODEL }}
           LAYOUT_PROVIDER: ${{ vars.LAYOUT_PROVIDER }}
           OCR_PROVIDER: ${{ vars.OCR_PROVIDER }}
+          RB_SECRET_KEY: ${{ secrets.RB_SECRET_KEY }}
         with:
           host: ${{ env.DEPLOY_HOST }}
           username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           command_timeout: 35m
-          envs: APP_PORT,VLM_API_KEY,VLM_BASE_URL,VLM_MODEL,LAYOUT_PROVIDER,OCR_PROVIDER
+          envs: APP_PORT,VLM_API_KEY,VLM_BASE_URL,VLM_MODEL,LAYOUT_PROVIDER,OCR_PROVIDER,RB_SECRET_KEY
           script: |
             set -e
             DEPLOY_PATH="${{ env.DEPLOY_PATH }}"
@@ -99,6 +101,7 @@ jobs:
               echo "VLM_API_KEY=$VLM_API_KEY"
               echo "VLM_BASE_URL=$VLM_BASE_URL"
               echo "VLM_MODEL=$VLM_MODEL"
+              echo "RB_SECRET_KEY=$RB_SECRET_KEY"
             } > .env
             chmod 600 .env
 

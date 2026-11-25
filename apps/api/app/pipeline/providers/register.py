@@ -1,10 +1,17 @@
-"""按环境变量选择 provider，缺省一律回落到 mock（演示永不因缺模型而中断）。"""
+"""按配置选择 provider，缺省一律回落到 mock（演示永不因缺模型而中断）。
+
+OCR 配置来自 ai_config.effective()：数据库页面保存值 > 环境变量 > 默认值，
+每次创建 provider 时重新解析，因此页面保存后下一个任务立即生效。
+"""
 
 from __future__ import annotations
 
 import logging
 import os
 
+from sqlalchemy.orm import Session
+
+from ...ai_config import effective as effective_ai_config
 from .base import LayoutProvider, OcrProvider
 from .mock import MockLayoutProvider, MockOcrProvider
 
@@ -23,13 +30,15 @@ def get_layout_provider() -> LayoutProvider:
     return MockLayoutProvider()
 
 
-def get_ocr_provider() -> OcrProvider:
-    mode = os.environ.get("OCR_PROVIDER", "mock").lower()
-    if mode == "vlm" and os.environ.get("VLM_API_KEY"):
+def get_ocr_provider(session: Session | None = None) -> OcrProvider:
+    cfg = effective_ai_config(session)
+    if cfg["provider"] == "vlm" and cfg["api_key"]:
         try:
             from .vlm import VlmOcrProvider
 
-            return VlmOcrProvider()
+            return VlmOcrProvider(
+                api_key=cfg["api_key"], base_url=cfg["base_url"], model=cfg["model"]
+            )
         except Exception as exc:  # pragma: no cover
             logger.warning("vlm ocr provider unavailable (%s), fallback to mock", exc)
     return MockOcrProvider()

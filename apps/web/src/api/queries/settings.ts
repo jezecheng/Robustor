@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, patchJSON, postJSON } from '../client'
+import { apiFetch, patchJSON, postJSON, putJSON } from '../client'
 import type { components } from '../types'
 
+type AiConfigOut = components['schemas']['AiConfigOut']
+type AiConfigPatch = components['schemas']['AiConfigPatch']
+type AiKeyIn = components['schemas']['AiKeyIn']
+type AiKeyOut = components['schemas']['AiKeyOut']
+type AiKeyPatch = components['schemas']['AiKeyPatch']
 type DocumentOut = components['schemas']['DocumentOut']
 type InkProfileIn = components['schemas']['InkProfileIn']
 type InkProfileOut = components['schemas']['InkProfileOut']
@@ -12,6 +17,7 @@ type TagOut = components['schemas']['TagOut']
 
 const INK_PROFILES_KEY = ['ink-profiles'] as const
 const TAGS_KEY = ['tags'] as const
+const AI_CONFIG_KEY = ['ai-config'] as const
 
 export function useInkProfiles() {
   return useQuery({
@@ -88,6 +94,54 @@ export function useMergeTags() {
       postJSON<TagOut>('/tags/merge', payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TAGS_KEY })
+    },
+  })
+}
+
+export function useAiConfig() {
+  return useQuery({
+    queryKey: AI_CONFIG_KEY,
+    queryFn: () => apiFetch<AiConfigOut>('/ai-config'),
+  })
+}
+
+export function useUpdateAiConfig() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: AiConfigPatch) => putJSON<AiConfigOut>('/ai-config', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AI_CONFIG_KEY })
+    },
+  })
+}
+
+export function useCreateAiKey() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: AiKeyIn) => postJSON<AiKeyOut>('/ai-keys', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AI_CONFIG_KEY })
+    },
+  })
+}
+
+export function usePatchAiKey() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: AiKeyPatch }) =>
+      patchJSON<AiKeyOut>(`/ai-keys/${id}`, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AI_CONFIG_KEY })
+    },
+  })
+}
+
+export function useDeleteAiKey() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiFetch<void>(`/ai-keys/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: AI_CONFIG_KEY })
     },
   })
 }

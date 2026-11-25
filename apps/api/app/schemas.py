@@ -18,6 +18,7 @@ JobStage = Literal["preprocess", "layout", "ink", "recognize", "assemble", "tag"
 JobStatus = Literal["queued", "running", "done", "failed"]
 PageStatus = Literal["pending", "ready", "failed"]
 BBox = list[float]  # [x, y, w, h] 归一化 0–1，原图未旋转坐标系
+AiProvider = Literal["mock", "vlm"]
 
 
 class ORMModel(BaseModel):
@@ -263,3 +264,50 @@ class InkProfileOut(ORMModel):
     name: str
     is_default: bool
     rules_json: dict[str, Any] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------- AI API 配置
+
+
+class AiConfigPatch(BaseModel):
+    """provider/base_url/model 显式传 null 表示清除该字段（回落到环境变量/默认值）。"""
+
+    provider: AiProvider | None = None
+    base_url: str | None = None
+    model: str | None = None
+
+
+class AiKeyIn(BaseModel):
+    name: str = ""
+    api_key: str = Field(min_length=1)
+
+
+class AiKeyPatch(BaseModel):
+    name: str | None = None
+    api_key: str | None = None
+    is_active: bool | None = None
+
+
+class AiKeyOut(BaseModel):
+    id: str
+    name: str
+    api_key_masked: str
+    is_active: bool
+    created_at: datetime
+
+
+class AiConfigOut(BaseModel):
+    # 数据库已保存的值（null = 跟随环境变量/默认值）
+    provider: AiProvider | None = None
+    base_url: str | None = None
+    model: str | None = None
+    updated_at: datetime | None = None
+    keys: list[AiKeyOut] = Field(default_factory=list)
+
+    # 实际生效值（数据库 > 环境变量 > 默认值）
+    effective_provider: AiProvider
+    effective_base_url: str
+    effective_model: str
+    effective_api_key_set: bool = False
+    api_key_source: Literal["db", "env", "none"] = "none"
+    active_key_id: str | None = None

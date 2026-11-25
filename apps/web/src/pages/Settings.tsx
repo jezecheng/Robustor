@@ -6,21 +6,27 @@ import { Chip } from '../ui/Chip'
 import { Tag } from '../ui/Tag'
 import { useDocuments } from '../api/queries/documents'
 import {
+  useAiConfig,
+  useCreateAiKey,
   useCreateInkProfile,
   useCreateTag,
+  useDeleteAiKey,
   useInkProfiles,
   useMergeTags,
+  usePatchAiKey,
   usePatchInkProfile,
   usePendingTags,
   useReidentifyDocument,
   useTags,
+  useUpdateAiConfig,
 } from '../api/queries/settings'
 import type { components } from '../api/types'
 
+type AiConfigPatch = components['schemas']['AiConfigPatch']
 type InkProfileOut = components['schemas']['InkProfileOut']
 type TagOut = components['schemas']['TagOut']
 
-type TabKey = 'ink' | 'tags' | 'model'
+type TabKey = 'ink' | 'tags' | 'ai' | 'model'
 
 const inputStyle: CSSProperties = {
   padding: '6px 10px',
@@ -528,7 +534,251 @@ function TagsTab() {
   )
 }
 
-// ---------------------------------------------------------------- Tab 3 模型
+// ---------------------------------------------------------------- Tab 3 AI API
+
+const PROVIDER_OPTIONS = [
+  { value: '', label: '跟随环境变量 / 默认' },
+  { value: 'mock', label: 'mock（离线假数据）' },
+  { value: 'vlm', label: 'vlm（云端视觉模型）' },
+] as const
+
+const KEY_SOURCE_LABEL: Record<string, string> = {
+  db: '数据库',
+  env: '环境变量',
+  none: '未配置',
+}
+
+function AiApiTab() {
+  const config = useAiConfig()
+  const update = useUpdateAiConfig()
+  const createKey = useCreateAiKey()
+  const patchKey = usePatchAiKey()
+  const deleteKey = useDeleteAiKey()
+
+  const [provider, setProvider] = useState<'' | 'mock' | 'vlm'>('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [model, setModel] = useState('')
+  const [newKeyName, setNewKeyName] = useState('')
+  const [newKeyValue, setNewKeyValue] = useState('')
+  const [notice, setNotice] = useState('')
+  const [keyNotice, setKeyNotice] = useState('')
+
+  useEffect(() => {
+    const data = config.data
+    if (!data) return
+    setProvider(data.provider ?? '')
+    setBaseUrl(data.base_url ?? '')
+    setModel(data.model ?? '')
+  }, [config.data])
+
+  const save = () => {
+    if (config.isLoading || update.isPending) return
+    const payload: AiConfigPatch = {
+      provider: provider || null,
+      base_url: baseUrl.trim() || null,
+      model: model.trim() || null,
+    }
+    update.mutate(payload, {
+      onSuccess: () => setNotice('已保存，下一个识别任务立即生效。'),
+    })
+  }
+
+  const addKey = () => {
+    const value = newKeyValue.trim()
+    if (!value || createKey.isPending) return
+    createKey.mutate(
+      { name: newKeyName.trim(), api_key: value },
+      {
+        onSuccess: (key) => {
+          setNewKeyName('')
+          setNewKeyValue('')
+          setKeyNotice(
+            key.is_active ? `已添加「${key.name}」并设为当前使用。` : `已添加「${key.name}」。`,
+          )
+        },
+      },
+    )
+  }
+
+  const activateKey = (id: string) => {
+    if (patchKey.isPending) return
+    patchKey.mutate(
+      { id, patch: { is_active: true } },
+      { onSuccess: (key) => setKeyNotice(`已切换到「${key.name}」。`) },
+    )
+  }
+
+  const removeKey = (id: string, name: string) => {
+    if (deleteKey.isPending) return
+    if (!window.confirm(`确认删除 Key「${name}」？删除后无法恢复。`)) return
+    deleteKey.mutate(id, { onSuccess: () => setKeyNotice(`已删除「${name}」。`) })
+  }
+
+  const data = config.data
+  const keys = data?.keys ?? []
+  const vlmWithoutKey = data?.effective_provider === 'vlm' && !data.effective_api_key_set
+
+  return (
+    <div className="stack">
+      <Card title="AI API 配置" subtitle="保存到本地数据库，下一次识别任务读取时立即生效，无需重启。">
+        <div className="stack" style={{ gap: 'var(--space-3)' }}>
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="muted">识别 provider</span>
+            <select
+              value={provider}
+              onChange={(event) => setProvider(event.target.value as '' | 'mock' | 'vlm')}
+              style={{ ...inputStyle, maxWidth: 320 }}
+            >
+              {PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="muted">Base URL（完整 chat/completions 端点）</span>
+            <input
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              placeholder="留空则用环境变量或 https://api.openai.com/v1/chat/completions"
+              style={inputStyle}
+            />
+          </label>
+
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="muted">模型</span>
+            <input
+              value={model}
+              onChange={(event) => setModel(event.target.value)}
+              placeholder="留空则用环境变量或 gpt-4o-mini"
+              style={{ ...inputStyle, maxWidth: 320 }}
+            />
+          </label>
+
+          <div className="row-wrap">
+            <Button variant="primary" onClick={save} disabled={config.isLoading || update.isPending}>
+              {update.isPending ? '保存中…' : '保存配置'}
+            </Button>
+            {notice && (
+              <span className="mono" style={{ color: 'var(--ok)' }}>
+                {notice}
+              </span>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      <Card title="API Key 池" subtitle="可存多条，只有标注「使用中」的那条参与识别；全部未激活时回落到环境变量。">
+        <div className="stack" style={{ gap: 'var(--space-3)' }}>
+          {!keys.length ? (
+            <div className="muted">还没有保存 Key，可在下方添加。</div>
+          ) : (
+            keys.map((key) => (
+              <div
+                key={key.id}
+                className="row-wrap"
+                style={{ paddingBottom: 8, borderBottom: '1px solid var(--line)' }}
+              >
+                <strong style={{ minWidth: 120 }}>{key.name}</strong>
+                <span className="mono muted">{key.api_key_masked}</span>
+                {key.is_active && <Tag>使用中</Tag>}
+                <div className="grow" />
+                <Button
+                  size="sm"
+                  disabled={key.is_active || patchKey.isPending}
+                  onClick={() => activateKey(key.id)}
+                >
+                  使用
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={deleteKey.isPending}
+                  onClick={() => removeKey(key.id, key.name)}
+                >
+                  删除
+                </Button>
+              </div>
+            ))
+          )}
+
+          <div className="row-wrap" style={{ paddingTop: 'var(--space-2)' }}>
+            <input
+              value={newKeyName}
+              onChange={(event) => setNewKeyName(event.target.value)}
+              placeholder="名称（留空自动编号）"
+              style={{ ...inputStyle, width: 180 }}
+            />
+            <input
+              type="password"
+              value={newKeyValue}
+              onChange={(event) => setNewKeyValue(event.target.value)}
+              autoComplete="off"
+              placeholder="粘贴 API Key"
+              style={{ ...inputStyle, minWidth: 320 }}
+            />
+            <Button
+              variant="primary"
+              onClick={addKey}
+              disabled={!newKeyValue.trim() || createKey.isPending}
+            >
+              {createKey.isPending ? '添加中…' : '添加 Key'}
+            </Button>
+            {keyNotice && (
+              <span className="mono" style={{ color: 'var(--ok)' }}>
+                {keyNotice}
+              </span>
+            )}
+          </div>
+          <span className="muted" style={{ fontSize: 12 }}>
+            第一条 Key 会自动设为使用中；接口只回传掩码，不回传明文。
+          </span>
+        </div>
+      </Card>
+
+      <Card title="实际生效" subtitle="优先级：数据库保存值 > 环境变量 > 默认值。">
+        <div className="stack" style={{ gap: 'var(--space-2)' }}>
+          <div className="row-wrap">
+            <span className="muted" style={{ width: 96 }}>
+              provider
+            </span>
+            <span className="mono">{data?.effective_provider ?? '—'}</span>
+          </div>
+          <div className="row-wrap">
+            <span className="muted" style={{ width: 96 }}>
+              Base URL
+            </span>
+            <span className="mono">{data?.effective_base_url ?? '—'}</span>
+          </div>
+          <div className="row-wrap">
+            <span className="muted" style={{ width: 96 }}>
+              模型
+            </span>
+            <span className="mono">{data?.effective_model ?? '—'}</span>
+          </div>
+          <div className="row-wrap">
+            <span className="muted" style={{ width: 96 }}>
+              API Key
+            </span>
+            <span className="mono">
+              {data?.effective_api_key_set
+                ? `已配置（来源：${KEY_SOURCE_LABEL[data.api_key_source] ?? data.api_key_source}）`
+                : '未配置'}
+            </span>
+          </div>
+          {vlmWithoutKey && (
+            <div className="muted" style={{ color: 'var(--danger)', fontSize: 12 }}>
+              provider 为 vlm 但没有可用 Key，识别会自动回落到 mock。
+            </div>
+          )}
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- Tab 4 模型
 
 function ModelTab() {
   return (
@@ -561,13 +811,14 @@ function ModelTab() {
         </pre>
       </Card>
 
-      <Card title="API Key" subtitle="只从环境变量读取，永不入库、不在页面回显">
+      <Card title="API Key" subtitle="在「AI API」页配置，仅存本地数据库，不回传明文">
         <div className="stack">
           <div>
-            云端识别的 Key 通过环境变量 <code className="mono">VLM_API_KEY</code> 提供；未设置时自动回落到 mock。
+            云端识别的 Key 可在「AI API」页保存，优先级高于环境变量 <code className="mono">VLM_API_KEY</code>；
+            两者都没有时自动回落到 mock。
           </div>
           <div className="muted" style={{ fontSize: 12 }}>
-            本页为只读说明，不提供读取或写入环境变量的接口。
+            本页仅作说明，配置请到「AI API」页。
           </div>
         </div>
       </Card>
@@ -596,6 +847,9 @@ export default function Settings() {
         <Chip active={tab === 'tags'} onClick={() => setTab('tags')}>
           标签词表
         </Chip>
+        <Chip active={tab === 'ai'} onClick={() => setTab('ai')}>
+          AI API
+        </Chip>
         <Chip active={tab === 'model'} onClick={() => setTab('model')}>
           模型
         </Chip>
@@ -603,6 +857,7 @@ export default function Settings() {
 
       {tab === 'ink' && <InkTab />}
       {tab === 'tags' && <TagsTab />}
+      {tab === 'ai' && <AiApiTab />}
       {tab === 'model' && <ModelTab />}
     </div>
   )

@@ -1,6 +1,6 @@
 """VLM OCR provider（默认不启用）：只有 OCR_PROVIDER=vlm 且 VLM_API_KEY 存在时由 register 实例化。
 
-全部配置只读环境变量，绝不把 key 写进代码：
+配置优先取数据库 ai_config（页面可改、保存即刻生效），未配置再回落环境变量：
 - VLM_BASE_URL：完整 chat/completions 端点，缺省 https://api.openai.com/v1/chat/completions
 - VLM_API_KEY：Bearer token
 - VLM_MODEL：默认 gpt-4o-mini
@@ -16,7 +16,8 @@ import re
 
 import httpx
 
-DEFAULT_BASE_URL = "https://api.openai.com/v1/chat/completions"
+from ...ai_config import DEFAULT_BASE_URL, DEFAULT_MODEL
+
 TIMEOUT = 20.0
 
 SYSTEM_PROMPT = (
@@ -57,12 +58,17 @@ def _parse_json(content: str) -> dict:
 class VlmOcrProvider:
     name = "vlm"
 
-    def __init__(self) -> None:
-        self.api_key = os.environ.get("VLM_API_KEY", "")
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        self.api_key = api_key or os.environ.get("VLM_API_KEY", "")
         if not self.api_key:
             raise RuntimeError("VLM_API_KEY is not set")
-        self.base_url = os.environ.get("VLM_BASE_URL") or DEFAULT_BASE_URL
-        self.model = os.environ.get("VLM_MODEL", "gpt-4o-mini")
+        self.base_url = base_url or os.environ.get("VLM_BASE_URL") or DEFAULT_BASE_URL
+        self.model = model or os.environ.get("VLM_MODEL") or DEFAULT_MODEL
 
     def recognize(self, image_bytes: bytes, hint: str) -> tuple[str, float]:
         b64 = base64.b64encode(image_bytes).decode("ascii")
