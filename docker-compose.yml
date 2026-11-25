@@ -2,7 +2,7 @@
 # 本地也可以直接 docker compose up --build 验证
 services:
   app:
-    image: ${IMAGE:-ghcr.io/your-org/robustor:latest}
+    image: ${IMAGE:-ghcr.io/jezecheng/robustor:latest}
     build:
       context: .
     container_name: robustor

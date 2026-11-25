@@ -15,24 +15,48 @@ apps/web/coverage/
 *.log
 
 # ---- 凭据 / 密钥（绝不入库）----
+# 环境变量
 .env
 .env.*
 !.env.example
+*.env
+# 私钥 / 证书
 *.pem
 *.key
 *.p12
 *.pfx
 *.jks
+*.jceks
 *.keystore
 *.crt
 *.cer
+*.der
+*.csr
+*.gpg
+*.asc
+*.ovpn
 id_rsa*
 id_ed25519*
+# 工具凭据
+.git-credentials
+.npmrc
+.pypirc
+.netrc
+netrc
+# 凭据 / 密钥数据文件
 secrets/
 .secrets/
+secret/
 credentials.json
 credentials*.json
+credentials.*
+secrets.*
+secret.*
+*.secret
+*.secrets
 *token*.json
+service-account*.json
+service_account*.json
 
 # ---- 本机测试产物 / 运行数据（不上传）----
 data/

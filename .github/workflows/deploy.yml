@@ -1,15 +1,23 @@
 name: build-and-deploy
 
-# 推送 main → 构建镜像 → 推到镜像仓库 → SSH 到腾讯云主机 docker compose 拉取重启。
+# 推送 main → 构建镜像并推到 GHCR → SSH 到腾讯云主机（110.42.255.249，用户 ubuntu）
+# → 写入 /opt/robustor/docker-compose.yml → docker compose pull && up -d。
 #
-# 需要的 Repository secrets：
-#   REGISTRY_USERNAME / REGISTRY_PASSWORD  镜像仓库账号（腾讯云 TCR 用「访问管理」里的 API 密钥）
-#   DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY / DEPLOY_PATH（服务器上的 compose 目录）
-#   DEPLOY_PORT（可选，默认 22）
-# 需要的 Repository variables：
-#   REGISTRY      如 ghcr.io 或 ccr.ccs.tencentyun.com
-#   IMAGE_NAME    如 <namespace>/robustor（腾讯云写法：<命名空间>/robustor）
-#   APP_PORT      主机映射端口，默认 8888
+# 需要在仓库 Settings → Secrets and variables → Actions 配置：
+#   Secrets（必填）
+#     DEPLOY_SSH_KEY   ubuntu 用户的 SSH 私钥（例如 ~/.ssh/id_ed25519 的内容）
+#   Secrets（可选）
+#     DEPLOY_PORT      默认 22
+#     GHCR_TOKEN       若 GHCR 镜像包为私有，需一个带 read:packages 权限的 PAT；
+#                      把镜像包设为 Public 后可省略
+#     VLM_API_KEY      启用真实 VLM 识别时提供
+#   Variables（可选）
+#     VLM_BASE_URL / VLM_MODEL / LAYOUT_PROVIDER / OCR_PROVIDER / APP_PORT
+#
+# 服务器前置条件：
+#   1. ubuntu 用户可免密 sudo，且已安装 docker + docker compose 插件
+#   2. 腾讯云安全组放行 8888/TCP
+#   3. /opt/robustor 首次由本工作流创建并 chown 给 ubuntu
 
 on:
   push:
@@ -21,9 +29,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: ${{ vars.REGISTRY || 'ghcr.io' }}
-  IMAGE_NAME: ${{ vars.IMAGE_NAME || 'robustor' }}
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/robustor
   APP_PORT: ${{ vars.APP_PORT || '8888' }}
+  DEPLOY_HOST: 110.42.255.249
+  DEPLOY_USER: ubuntu
+  DEPLOY_PATH: /opt/robustor
 
 jobs:
   build:
@@ -36,12 +47,12 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Login registry
+      - name: Login GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -58,21 +69,81 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
+      - uses: actions/checkout@v4
+
+      - name: Prepare remote directory
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
+          host: ${{ env.DEPLOY_HOST }}
+          username: ${{ env.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           script: |
             set -e
-            cd ${{ secrets.DEPLOY_PATH }}
-            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ env.REGISTRY }} \
-              -u "${{ secrets.REGISTRY_USERNAME }}" --password-stdin
-            export IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-            export APP_PORT="${{ env.APP_PORT }}"
-            docker compose pull
-            docker compose up -d --remove-orphans
-            docker image prune -f
+            sudo mkdir -p "${{ env.DEPLOY_PATH }}"
+            sudo chown -R "${{ env.DEPLOY_USER }}" "${{ env.DEPLOY_PATH }}"
+
+      - name: Upload compose file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: ${{ env.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: docker-compose.yml
+          target: ${{ env.DEPLOY_PATH }}
+          overwrite: true
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          APP_PORT: ${{ env.APP_PORT }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          VLM_API_KEY: ${{ secrets.VLM_API_KEY }}
+          VLM_BASE_URL: ${{ vars.VLM_BASE_URL }}
+          VLM_MODEL: ${{ vars.VLM_MODEL }}
+          LAYOUT_PROVIDER: ${{ vars.LAYOUT_PROVIDER }}
+          OCR_PROVIDER: ${{ vars.OCR_PROVIDER }}
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: ${{ env.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          envs: IMAGE,APP_PORT,GHCR_USER,GHCR_TOKEN,VLM_API_KEY,VLM_BASE_URL,VLM_MODEL,LAYOUT_PROVIDER,OCR_PROVIDER
+          script: |
+            set -e
+            cd "${{ env.DEPLOY_PATH }}"
+
+            if ! sudo docker compose version >/dev/null 2>&1; then
+              echo "服务器缺少 docker compose 插件，请先安装：sudo apt install docker-compose-plugin" >&2
+              exit 1
+            fi
+
+            if [ -n "$GHCR_TOKEN" ]; then
+              echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            fi
+
+            sudo env \
+              IMAGE="$IMAGE" \
+              APP_PORT="$APP_PORT" \
+              VLM_API_KEY="$VLM_API_KEY" \
+              VLM_BASE_URL="$VLM_BASE_URL" \
+              VLM_MODEL="$VLM_MODEL" \
+              LAYOUT_PROVIDER="$LAYOUT_PROVIDER" \
+              OCR_PROVIDER="$OCR_PROVIDER" \
+              docker compose pull
+
+            sudo env \
+              IMAGE="$IMAGE" \
+              APP_PORT="$APP_PORT" \
+              VLM_API_KEY="$VLM_API_KEY" \
+              VLM_BASE_URL="$VLM_BASE_URL" \
+              VLM_MODEL="$VLM_MODEL" \
+              LAYOUT_PROVIDER="$LAYOUT_PROVIDER" \
+              OCR_PROVIDER="$OCR_PROVIDER" \
+              docker compose up -d --remove-orphans
+
+            sudo docker image prune -f
             curl -fsS "http://127.0.0.1:${APP_PORT}/api/health" && echo "healthy"
