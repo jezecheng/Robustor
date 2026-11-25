@@ -5,8 +5,9 @@
 FROM node:20-alpine AS web
 WORKDIR /build
 COPY apps/web/package.json apps/web/package-lock.json ./
-# 国内构建走 npmmirror，避免从 registry.npmjs.org 拉包超时
-RUN npm config set registry https://registry.npmmirror.com && npm ci --ignore-scripts
+# lockfile 里的 resolved 指向官方源；强制切 npmmirror 会因个别包（如 rettime）未同步而 404，
+# 故使用官方源，仅开启重试以应对偶发抖动
+RUN npm ci --ignore-scripts --fetch-retries=5 --fetch-retry-mintimeout=1000 --fetch-retry-maxtimeout=120000
 COPY apps/web/ ./
 RUN npm run build
 
