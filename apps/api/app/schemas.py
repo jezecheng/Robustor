@@ -295,6 +295,12 @@ class AiProviderOut(BaseModel):
     updated_at: datetime
 
 
+class AiProviderTestOut(BaseModel):
+    ok: bool
+    latency_ms: int
+    message: str
+
+
 class AiConfigOut(BaseModel):
     providers: list[AiProviderOut] = Field(default_factory=list)
     active_provider_id: str | None = None

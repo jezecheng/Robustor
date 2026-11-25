@@ -18,10 +18,12 @@ import {
   usePendingTags,
   useReidentifyDocument,
   useTags,
+  useTestAiProvider,
 } from '../api/queries/settings'
 import type { components } from '../api/types'
 
 type AiProviderOut = components['schemas']['AiProviderOut']
+type AiProviderTestOut = components['schemas']['AiProviderTestOut']
 type InkProfileOut = components['schemas']['InkProfileOut']
 type TagOut = components['schemas']['TagOut']
 
@@ -546,6 +548,7 @@ function AiApiTab() {
   const createProvider = useCreateAiProvider()
   const patchProvider = usePatchAiProvider()
   const deleteProvider = useDeleteAiProvider()
+  const testProvider = useTestAiProvider()
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -553,6 +556,8 @@ function AiApiTab() {
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [notice, setNotice] = useState('')
+  const [testingId, setTestingId] = useState<string | null>(null)
+  const [testResults, setTestResults] = useState<Record<string, AiProviderTestOut>>({})
 
   const resetForm = () => {
     setEditingId(null)
@@ -617,6 +622,21 @@ function AiApiTab() {
     )
   }
 
+  const test = (provider: AiProviderOut) => {
+    if (testingId) return
+    setTestingId(provider.id)
+    testProvider.mutate(provider.id, {
+      onSuccess: (result) =>
+        setTestResults((prev) => ({ ...prev, [provider.id]: result })),
+      onError: () =>
+        setTestResults((prev) => ({
+          ...prev,
+          [provider.id]: { ok: false, latency_ms: 0, message: '请求失败，请查看服务端日志' },
+        })),
+      onSettled: () => setTestingId(null),
+    })
+  }
+
   const remove = (provider: AiProviderOut) => {
     if (deleteProvider.isPending) return
     if (!window.confirm(`确认删除配置「${provider.name}」？删除后无法恢复。`)) return
@@ -645,40 +665,62 @@ function AiApiTab() {
             providers.map((provider) => (
               <div
                 key={provider.id}
-                className="row-wrap"
-                style={{ paddingBottom: 8, borderBottom: '1px solid var(--line)' }}
+                className="stack"
+                style={{ paddingBottom: 8, borderBottom: '1px solid var(--line)', gap: 4 }}
               >
-                <strong style={{ minWidth: 110 }}>{provider.name}</strong>
-                <span
-                  className="mono muted"
-                  title={provider.base_url}
-                  style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                >
-                  {provider.base_url}
-                </span>
-                <Tag>{provider.model}</Tag>
-                {provider.is_active && <Tag>使用中</Tag>}
-                <span className="muted" style={{ fontSize: 12 }}>
-                  {provider.has_key ? 'Key 已保存' : '未设置 Key'}
-                </span>
-                <div className="grow" />
-                <Button size="sm" disabled={saving} onClick={() => startEdit(provider)}>
-                  编辑
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={provider.is_active || saving}
-                  onClick={() => activate(provider)}
-                >
-                  使用
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={deleteProvider.isPending}
-                  onClick={() => remove(provider)}
-                >
-                  删除
-                </Button>
+                <div className="row-wrap">
+                  <strong style={{ minWidth: 110 }}>{provider.name}</strong>
+                  <span
+                    className="mono muted"
+                    title={provider.base_url}
+                    style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {provider.base_url}
+                  </span>
+                  <Tag>{provider.model}</Tag>
+                  {provider.is_active && <Tag>使用中</Tag>}
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {provider.has_key ? 'Key 已保存' : '未设置 Key'}
+                  </span>
+                  <div className="grow" />
+                  <Button
+                    size="sm"
+                    disabled={testingId === provider.id}
+                    onClick={() => test(provider)}
+                  >
+                    {testingId === provider.id ? '测试中…' : '测试'}
+                  </Button>
+                  <Button size="sm" disabled={saving} onClick={() => startEdit(provider)}>
+                    编辑
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={provider.is_active || saving}
+                    onClick={() => activate(provider)}
+                  >
+                    使用
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={deleteProvider.isPending}
+                    onClick={() => remove(provider)}
+                  >
+                    删除
+                  </Button>
+                </div>
+                {testResults[provider.id] && (
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 12,
+                      color: testResults[provider.id].ok ? 'var(--ok)' : 'var(--danger)',
+                    }}
+                  >
+                    {testResults[provider.id].ok
+                      ? `连接正常 · ${testResults[provider.id].latency_ms}ms · ${testResults[provider.id].message}`
+                      : `测试失败 · ${testResults[provider.id].message}`}
+                  </span>
+                )}
               </div>
             ))
           )}

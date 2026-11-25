@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..ai_config import effective
+from ..ai_probe import probe
 from ..crypto import decrypt, encrypt
 from ..db import get_session
 from ..models import AiProvider, InkProfile
@@ -16,6 +17,7 @@ from ..schemas import (
     AiProviderIn,
     AiProviderOut,
     AiProviderPatch,
+    AiProviderTestOut,
     InkProfileIn,
     InkProfileOut,
     InkProfilePatch,
@@ -199,6 +201,20 @@ def patch_ai_provider(
 
     session.commit()
     return _ai_config_out(session)
+
+
+@router.post("/ai-providers/{provider_id}/test", response_model=AiProviderTestOut)
+def test_ai_provider(
+    provider_id: str, session: Session = Depends(get_session)
+) -> AiProviderTestOut:
+    provider = session.get(AiProvider, provider_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="配置不存在")
+
+    api_key = decrypt(provider.api_key)
+    if not api_key:
+        return AiProviderTestOut(ok=False, latency_ms=0, message="未保存 Key 或 Key 无法解密")
+    return AiProviderTestOut(**probe(provider.base_url, provider.model, api_key))
 
 
 @router.delete("/ai-providers/{provider_id}", response_model=AiConfigOut)

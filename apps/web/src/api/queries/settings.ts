@@ -5,6 +5,7 @@ import type { components } from '../types'
 type AiConfigOut = components['schemas']['AiConfigOut']
 type AiProviderIn = components['schemas']['AiProviderIn']
 type AiProviderPatch = components['schemas']['AiProviderPatch']
+type AiProviderTestOut = components['schemas']['AiProviderTestOut']
 type DocumentOut = components['schemas']['DocumentOut']
 type InkProfileIn = components['schemas']['InkProfileIn']
 type InkProfileOut = components['schemas']['InkProfileOut']
@@ -121,6 +122,13 @@ export function usePatchAiProvider() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: AI_CONFIG_KEY })
     },
+  })
+}
+
+export function useTestAiProvider() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      postJSON<AiProviderTestOut>(`/ai-providers/${id}/test`, {}),
   })
 }
 

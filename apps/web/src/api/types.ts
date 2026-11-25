@@ -390,6 +390,23 @@ export interface paths {
         patch: operations["patch_ai_provider_api_ai_providers__provider_id__patch"];
         trace?: never;
     };
+    "/api/ai-providers/{provider_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Ai Provider */
+        post: operations["test_ai_provider_api_ai_providers__provider_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -489,6 +506,15 @@ export interface components {
             api_key?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /** AiProviderTestOut */
+        AiProviderTestOut: {
+            /** Ok */
+            ok: boolean;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Message */
+            message: string;
         };
         /** Body_create_document_api_documents_post */
         Body_create_document_api_documents_post: {
@@ -1984,6 +2010,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AiConfigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_ai_provider_api_ai_providers__provider_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiProviderTestOut"];
                 };
             };
             /** @description Validation Error */
