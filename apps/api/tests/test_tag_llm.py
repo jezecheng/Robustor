@@ -70,7 +70,7 @@ def test_tag_stage_fallback_without_chat(client, monkeypatch):
     from app.models import Document, Problem, Tag
     from app.pipeline.base import StageContext
 
-    monkeypatch.setattr(s6, "get_chat_provider", lambda session=None: None)
+    monkeypatch.setattr(s6, "get_chat_provider", lambda session=None, **_: None)
 
     with SessionLocal() as session:
         document = Document(subject="math", source_name="local-tag-test", page_count=1)

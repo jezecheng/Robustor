@@ -364,3 +364,64 @@ class AiConfigOut(BaseModel):
     effective_model: str
     effective_api_key_set: bool = False
     api_key_source: Literal["db", "env", "none"] = "none"
+
+
+# ---------------------------------------------------------------- AI 用量
+
+
+class AiUsageTotalsOut(BaseModel):
+    requests: int = 0
+    success: int = 0
+    failed: int = 0
+    success_rate: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    reasoning_tokens: int = 0
+    cached_tokens: int = 0
+    total_tokens: int = 0
+    avg_latency_ms: int = 0
+
+
+class AiUsageBucketOut(AiUsageTotalsOut):
+    bucket: str
+
+
+class AiUsageFacetOut(BaseModel):
+    value: str
+    requests: int = 0
+    total_tokens: int = 0
+
+
+class AiUsageSummaryOut(BaseModel):
+    start: datetime
+    end: datetime
+    bucket: Literal["day", "month"]
+    totals: AiUsageTotalsOut
+    series: list[AiUsageBucketOut] = Field(default_factory=list)
+    scenes: list[AiUsageFacetOut] = Field(default_factory=list)
+    providers: list[AiUsageFacetOut] = Field(default_factory=list)
+    models: list[AiUsageFacetOut] = Field(default_factory=list)
+
+
+class AiUsageRequestOut(BaseModel):
+    id: str
+    created_at: datetime
+    scene: str
+    success: bool
+    provider_name: str
+    model: str
+    document_id: str | None = None
+    latency_ms: int
+    error: str | None = None
+    prompt_tokens: int
+    completion_tokens: int
+    reasoning_tokens: int
+    cached_tokens: int
+    total_tokens: int
+
+
+class AiUsageRequestListOut(BaseModel):
+    items: list[AiUsageRequestOut] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    size: int = 20

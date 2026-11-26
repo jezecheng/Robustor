@@ -1,4 +1,4 @@
-"""ORM 表定义 —— 全项目唯一来源（15 张表）。其他 WP 只读，禁止修改。"""
+"""ORM 表定义 —— 全项目唯一来源（16 张表）。其他 WP 只读，禁止修改。"""
 
 from __future__ import annotations
 
@@ -229,6 +229,32 @@ class AiProvider(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class AiUsageLog(Base):
+    """每次调用 AI Provider 的用量与结果，只追加不更新。
+
+    provider_name / model 是请求发生时的快照：配置后续改名或删除，历史记录仍然可读。
+    usage 字段统一按 OpenAI 兼容格式拆成 输入 / 输出 / 推理 / 缓存 四类。
+    """
+
+    __tablename__ = "ai_usage_log"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    scene: Mapped[str] = mapped_column(String(32), default="", index=True)
+    provider_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    provider_name: Mapped[str] = mapped_column(String(128), default="", index=True)
+    model: Mapped[str] = mapped_column(String(128), default="", index=True)
+    document_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    success: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    reasoning_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Job(Base):

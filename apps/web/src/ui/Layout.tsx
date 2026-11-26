@@ -7,6 +7,7 @@ const NAV = [
   { to: '/problems', label: '错题本', hint: '筛选、详情、复习', end: false },
   { to: '/knowledge', label: '知识图谱', hint: '知识点与先修关系', end: false },
   { to: '/stats', label: '统计', hint: '知识点与方法论', end: false },
+  { to: '/ai-usage', label: 'AI 用量', hint: 'Token 消耗与请求明细', end: false },
   { to: '/settings', label: '设置', hint: '墨迹方案 / 词表', end: false },
 ]
 

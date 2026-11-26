@@ -407,6 +407,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/taxonomy/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Taxonomy Summary */
+        get: operations["taxonomy_summary_api_taxonomy_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Taxonomy Topics */
+        get: operations["taxonomy_topics_api_taxonomy_topics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/topics/{tag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Taxonomy Topic */
+        get: operations["taxonomy_topic_api_taxonomy_topics__tag_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/problems/{problem_id}/path": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Taxonomy Problem Path */
+        get: operations["taxonomy_problem_path_api_taxonomy_problems__problem_id__path_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-usage/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ai Usage Summary */
+        get: operations["ai_usage_summary_api_ai_usage_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-usage/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ai Usage Requests */
+        get: operations["ai_usage_requests_api_ai_usage_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -515,6 +617,210 @@ export interface components {
             latency_ms: number;
             /** Message */
             message: string;
+        };
+        /** AiUsageBucketOut */
+        AiUsageBucketOut: {
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Success
+             * @default 0
+             */
+            success: number;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /**
+             * Success Rate
+             * @default 0
+             */
+            success_rate: number;
+            /**
+             * Prompt Tokens
+             * @default 0
+             */
+            prompt_tokens: number;
+            /**
+             * Completion Tokens
+             * @default 0
+             */
+            completion_tokens: number;
+            /**
+             * Reasoning Tokens
+             * @default 0
+             */
+            reasoning_tokens: number;
+            /**
+             * Cached Tokens
+             * @default 0
+             */
+            cached_tokens: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+            /**
+             * Avg Latency Ms
+             * @default 0
+             */
+            avg_latency_ms: number;
+            /** Bucket */
+            bucket: string;
+        };
+        /** AiUsageFacetOut */
+        AiUsageFacetOut: {
+            /** Value */
+            value: string;
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+        };
+        /** AiUsageRequestListOut */
+        AiUsageRequestListOut: {
+            /** Items */
+            items?: components["schemas"]["AiUsageRequestOut"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Size
+             * @default 20
+             */
+            size: number;
+        };
+        /** AiUsageRequestOut */
+        AiUsageRequestOut: {
+            /** Id */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Scene */
+            scene: string;
+            /** Success */
+            success: boolean;
+            /** Provider Name */
+            provider_name: string;
+            /** Model */
+            model: string;
+            /** Document Id */
+            document_id?: string | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Error */
+            error?: string | null;
+            /** Prompt Tokens */
+            prompt_tokens: number;
+            /** Completion Tokens */
+            completion_tokens: number;
+            /** Reasoning Tokens */
+            reasoning_tokens: number;
+            /** Cached Tokens */
+            cached_tokens: number;
+            /** Total Tokens */
+            total_tokens: number;
+        };
+        /** AiUsageSummaryOut */
+        AiUsageSummaryOut: {
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /**
+             * Bucket
+             * @enum {string}
+             */
+            bucket: "day" | "month";
+            totals: components["schemas"]["AiUsageTotalsOut"];
+            /** Series */
+            series?: components["schemas"]["AiUsageBucketOut"][];
+            /** Scenes */
+            scenes?: components["schemas"]["AiUsageFacetOut"][];
+            /** Providers */
+            providers?: components["schemas"]["AiUsageFacetOut"][];
+            /** Models */
+            models?: components["schemas"]["AiUsageFacetOut"][];
+        };
+        /** AiUsageTotalsOut */
+        AiUsageTotalsOut: {
+            /**
+             * Requests
+             * @default 0
+             */
+            requests: number;
+            /**
+             * Success
+             * @default 0
+             */
+            success: number;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /**
+             * Success Rate
+             * @default 0
+             */
+            success_rate: number;
+            /**
+             * Prompt Tokens
+             * @default 0
+             */
+            prompt_tokens: number;
+            /**
+             * Completion Tokens
+             * @default 0
+             */
+            completion_tokens: number;
+            /**
+             * Reasoning Tokens
+             * @default 0
+             */
+            reasoning_tokens: number;
+            /**
+             * Cached Tokens
+             * @default 0
+             */
+            cached_tokens: number;
+            /**
+             * Total Tokens
+             * @default 0
+             */
+            total_tokens: number;
+            /**
+             * Avg Latency Ms
+             * @default 0
+             */
+            avg_latency_ms: number;
         };
         /** Body_create_document_api_documents_post */
         Body_create_document_api_documents_post: {
@@ -1045,6 +1351,145 @@ export interface components {
              * @enum {string}
              */
             status: "approved" | "pending";
+        };
+        /** TaxonomyFacetOut */
+        TaxonomyFacetOut: {
+            /** Value */
+            value: string;
+            /** Count */
+            count: number;
+        };
+        /** TaxonomyNeighborOut */
+        TaxonomyNeighborOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Subject */
+            subject?: string | null;
+            /** Domain */
+            domain?: string | null;
+            /** Grade */
+            grade?: number | null;
+            /** Semester */
+            semester?: string | null;
+            /** Chapter */
+            chapter?: string | null;
+            /** Topic Type */
+            topic_type?: string | null;
+            /**
+             * Strength
+             * @default hard
+             */
+            strength: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /** TaxonomyPathOut */
+        TaxonomyPathOut: {
+            /** Problem Id */
+            problem_id: string;
+            /** Knowledge */
+            knowledge?: components["schemas"]["TaxonomyTopicBriefOut"][];
+            /** Prerequisites */
+            prerequisites?: components["schemas"]["TaxonomyTopicBriefOut"][];
+        };
+        /** TaxonomySummaryOut */
+        TaxonomySummaryOut: {
+            /**
+             * Topics
+             * @default 0
+             */
+            topics: number;
+            /**
+             * Edges
+             * @default 0
+             */
+            edges: number;
+            /** Subjects */
+            subjects?: components["schemas"]["TaxonomyFacetOut"][];
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /**
+             * License
+             * @default
+             */
+            license: string;
+            /**
+             * Commit
+             * @default
+             */
+            commit: string;
+        };
+        /** TaxonomyTopicBriefOut */
+        TaxonomyTopicBriefOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Subject */
+            subject?: string | null;
+            /** Domain */
+            domain?: string | null;
+            /** Grade */
+            grade?: number | null;
+            /** Semester */
+            semester?: string | null;
+            /** Chapter */
+            chapter?: string | null;
+            /** Topic Type */
+            topic_type?: string | null;
+        };
+        /** TaxonomyTopicDetailOut */
+        TaxonomyTopicDetailOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Subject */
+            subject?: string | null;
+            /** Domain */
+            domain?: string | null;
+            /** Grade */
+            grade?: number | null;
+            /** Semester */
+            semester?: string | null;
+            /** Chapter */
+            chapter?: string | null;
+            /** Topic Type */
+            topic_type?: string | null;
+            /**
+             * External Id
+             * @default
+             */
+            external_id: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Mastery Criteria */
+            mastery_criteria?: string[];
+            /** Diagnostic Question */
+            diagnostic_question?: {
+                [key: string]: unknown;
+            } | null;
+            /** Standards */
+            standards?: {
+                [key: string]: unknown;
+            }[];
+            /** Prerequisites */
+            prerequisites?: components["schemas"]["TaxonomyNeighborOut"][];
+            /** Dependents */
+            dependents?: components["schemas"]["TaxonomyNeighborOut"][];
+            /** Ancestors */
+            ancestors?: components["schemas"]["TaxonomyTopicBriefOut"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -2044,6 +2489,193 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AiProviderTestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxonomy_summary_api_taxonomy_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomySummaryOut"];
+                };
+            };
+        };
+    };
+    taxonomy_topics_api_taxonomy_topics_get: {
+        parameters: {
+            query?: {
+                subject?: string | null;
+                domain?: string | null;
+                grade?: number | null;
+                q?: string | null;
+                chapter?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyTopicBriefOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxonomy_topic_api_taxonomy_topics__tag_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tag_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyTopicDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxonomy_problem_path_api_taxonomy_problems__problem_id__path_get: {
+        parameters: {
+            query?: {
+                depth?: number;
+            };
+            header?: never;
+            path: {
+                problem_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyPathOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_usage_summary_api_ai_usage_summary_get: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+                bucket?: ("day" | "month") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiUsageSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_usage_requests_api_ai_usage_requests_get: {
+        parameters: {
+            query?: {
+                start?: string | null;
+                end?: string | null;
+                page?: number;
+                size?: number;
+                success?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiUsageRequestListOut"];
                 };
             };
             /** @description Validation Error */

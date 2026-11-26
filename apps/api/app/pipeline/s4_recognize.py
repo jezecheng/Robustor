@@ -71,7 +71,7 @@ class RecognizeStage:
                 synchronize_session=False
             )
 
-        provider = get_ocr_provider(ctx.session)
+        provider = get_ocr_provider(ctx.session, document_id=ctx.document_id)
         warnings: list[str] = []
         recognized = 0
         marks = 0

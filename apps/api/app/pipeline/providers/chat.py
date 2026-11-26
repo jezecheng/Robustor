@@ -9,10 +9,14 @@ from __future__ import annotations
 
 import json
 import re
+import time
+from collections.abc import Callable
 
 import httpx
 
 TIMEOUT = 60.0
+
+UsageHook = Callable[[dict], None]
 
 
 def chat_endpoint(base_url: str) -> str:
@@ -45,6 +49,7 @@ class ChatProvider:
         base_url: str,
         model: str,
         timeout: float = TIMEOUT,
+        on_usage: UsageHook | None = None,
     ) -> None:
         if not api_key:
             raise RuntimeError("chat provider requires api key")
@@ -52,6 +57,7 @@ class ChatProvider:
         self.base_url = base_url
         self.model = model
         self.timeout = timeout
+        self.on_usage = on_usage
 
     def complete_json(self, system: str, user: str) -> dict:
         payload = {
@@ -63,12 +69,36 @@ class ChatProvider:
             ],
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}
+        started = time.perf_counter()
+        usage: dict | None = None
         try:
             response = httpx.post(
                 chat_endpoint(self.base_url), json=payload, headers=headers, timeout=self.timeout
             )
             response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
+            body = response.json()
+            usage = body.get("usage")
+            content = body["choices"][0]["message"]["content"]
+            data = parse_json_object(content)
         except Exception as exc:
+            self._report(usage, False, started, f"{type(exc).__name__}: {exc}")
             raise RuntimeError(f"chat completion failed: {type(exc).__name__}: {exc}") from exc
-        return parse_json_object(content)
+        self._report(usage, True, started, None)
+        return data
+
+    def _report(
+        self, usage: dict | None, success: bool, started: float, error: str | None
+    ) -> None:
+        if self.on_usage is None:
+            return
+        try:
+            self.on_usage(
+                {
+                    "success": success,
+                    "error": error,
+                    "latency_ms": int((time.perf_counter() - started) * 1000),
+                    "usage": usage,
+                }
+            )
+        except Exception:  # noqa: BLE001 - 用量钩子不能影响主流程
+            pass

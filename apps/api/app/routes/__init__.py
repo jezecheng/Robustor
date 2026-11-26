@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter
 
-from . import documents, jobs, problems, regions, settings, stats, tags, taxonomy
+from . import ai_usage, documents, jobs, problems, regions, settings, stats, tags, taxonomy
 
 api_router = APIRouter(prefix="/api")
 
-for module in (documents, jobs, regions, problems, tags, stats, settings, taxonomy):
+for module in (documents, jobs, regions, problems, tags, stats, settings, taxonomy, ai_usage):
     api_router.include_router(module.router)
 
 __all__ = ["api_router"]

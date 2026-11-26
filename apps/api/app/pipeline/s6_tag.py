@@ -138,7 +138,11 @@ class TagStage:
 
         warnings: list[str] = []
         llm_stats = {"llm_problems": 0, "llm_tags": 0, "llm_unresolved": 0}
-        chat = self._chat if self._chat is not None else get_chat_provider(session)
+        chat = (
+            self._chat
+            if self._chat is not None
+            else get_chat_provider(session, document_id=ctx.document_id)
+        )
         if chat is not None and plans:
             try:
                 llm_stats = self._apply_llm(plans, approved, chat)

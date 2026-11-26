@@ -214,7 +214,16 @@ def test_ai_provider(
     api_key = decrypt(provider.api_key)
     if not api_key:
         return AiProviderTestOut(ok=False, latency_ms=0, message="未保存 Key 或 Key 无法解密")
-    return AiProviderTestOut(**probe(provider.base_url, provider.model, api_key))
+    return AiProviderTestOut(
+        **probe(
+            provider.base_url,
+            provider.model,
+            api_key,
+            session=session,
+            provider_name=provider.name,
+            provider_id=provider.id,
+        )
+    )
 
 
 @router.delete("/ai-providers/{provider_id}", response_model=AiConfigOut)

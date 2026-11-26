@@ -5,6 +5,7 @@ import Console from './pages/Console'
 import WrongBook from './pages/WrongBook'
 import ProblemDetail from './pages/ProblemDetail'
 import Stats from './pages/Stats'
+import AiUsage from './pages/AiUsage'
 import KnowledgeGraph from './pages/KnowledgeGraph'
 import Settings from './pages/Settings'
 
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: 'problems/:problemId', element: <ProblemDetail /> },
       { path: 'knowledge', element: <KnowledgeGraph /> },
       { path: 'stats', element: <Stats /> },
+      { path: 'ai-usage', element: <AiUsage /> },
       { path: 'settings', element: <Settings /> },
     ],
   },

@@ -46,6 +46,7 @@ def effective(session: Session | None = None) -> dict:
             "api_key": api_key,
             "api_key_source": "db" if db_key else "env" if env_key else "none",
             "provider_id": row.id,
+            "provider_name": row.name or FALLBACK_NAME,
         }
 
     provider = os.environ.get("OCR_PROVIDER", "mock").lower()
@@ -58,6 +59,7 @@ def effective(session: Session | None = None) -> dict:
         "api_key": env_key,
         "api_key_source": "env" if env_key else "none",
         "provider_id": None,
+        "provider_name": "环境变量 Key" if env_key else FALLBACK_NAME,
     }
 
 

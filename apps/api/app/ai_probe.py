@@ -1,6 +1,8 @@
 """AI 配置可用性测试：用一张小尺寸样图走一次真实视觉请求。
 
 只验证「Base URL / Key / 模型」能否通、是否接受图片输入，不写库、不回传 Key。
+每次测试也会记入 AI 用量日志（业务场景=连接测试），方便在「AI 用量」页核对
+配置是否工作、一次测试消耗多少 token。
 """
 
 from __future__ import annotations
@@ -11,6 +13,9 @@ import time
 
 import httpx
 from PIL import Image, ImageDraw, ImageFont
+from sqlalchemy.orm import Session
+
+from .usage import record_ai_usage
 
 TIMEOUT = 25.0
 PROMPT = "图中写的是什么数字？只回复数字本身。"
@@ -29,8 +34,33 @@ def _sample_image() -> str:
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def probe(base_url: str, model: str, api_key: str) -> dict:
+def probe(
+    base_url: str,
+    model: str,
+    api_key: str,
+    *,
+    session: Session | None = None,
+    provider_name: str = "",
+    provider_id: str | None = None,
+) -> dict:
     started = time.perf_counter()
+
+    def finish(
+        result: dict, *, success: bool, usage: dict | None = None, error: str | None = None
+    ) -> dict:
+        record_ai_usage(
+            session,
+            scene="连接测试",
+            provider_name=provider_name or "连接测试",
+            provider_id=provider_id,
+            model=model,
+            success=success,
+            error=error,
+            latency_ms=int(result.get("latency_ms") or 0),
+            usage=usage,
+        )
+        return result
+
     payload = {
         "model": model,
         "temperature": 0,
@@ -52,30 +82,45 @@ def probe(base_url: str, model: str, api_key: str) -> dict:
     try:
         response = httpx.post(base_url, json=payload, headers=headers, timeout=TIMEOUT)
     except Exception as exc:  # noqa: BLE001 - 网络/超时统一转成可读信息
-        return {
-            "ok": False,
-            "latency_ms": int((time.perf_counter() - started) * 1000),
-            "message": f"连接失败：{type(exc).__name__}: {exc}"[:300],
-        }
+        message = f"连接失败：{type(exc).__name__}: {exc}"[:300]
+        return finish(
+            {"ok": False, "latency_ms": int((time.perf_counter() - started) * 1000), "message": message},
+            success=False,
+            error=message,
+        )
 
     latency_ms = int((time.perf_counter() - started) * 1000)
     if response.status_code >= 400:
-        return {
-            "ok": False,
-            "latency_ms": latency_ms,
-            "message": f"HTTP {response.status_code}: {response.text[:200]}",
-        }
+        message = f"HTTP {response.status_code}: {response.text[:200]}"
+        return finish(
+            {"ok": False, "latency_ms": latency_ms, "message": message},
+            success=False,
+            error=message,
+        )
 
     try:
-        content = response.json()["choices"][0]["message"]["content"]
+        body = response.json()
+        usage = body.get("usage")
+        content = body["choices"][0]["message"]["content"]
     except Exception:  # noqa: BLE001
-        return {
-            "ok": False,
-            "latency_ms": latency_ms,
-            "message": "响应不是 OpenAI Chat Completions 格式",
-        }
+        message = "响应不是 OpenAI Chat Completions 格式"
+        return finish(
+            {"ok": False, "latency_ms": latency_ms, "message": message},
+            success=False,
+            error=message,
+        )
 
     text = str(content or "").strip()
     if not text:
-        return {"ok": False, "latency_ms": latency_ms, "message": "模型返回了空内容"}
-    return {"ok": True, "latency_ms": latency_ms, "message": f"模型已响应：{text[:60]}"}
+        message = "模型返回了空内容"
+        return finish(
+            {"ok": False, "latency_ms": latency_ms, "message": message},
+            success=False,
+            usage=usage,
+            error=message,
+        )
+    return finish(
+        {"ok": True, "latency_ms": latency_ms, "message": f"模型已响应：{text[:60]}"},
+        success=True,
+        usage=usage,
+    )

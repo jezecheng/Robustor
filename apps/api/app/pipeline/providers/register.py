@@ -12,10 +12,31 @@ import os
 from sqlalchemy.orm import Session
 
 from ...ai_config import effective as effective_ai_config
+from ...usage import record_ai_usage
 from .base import LayoutProvider, OcrProvider
 from .mock import MockLayoutProvider, MockOcrProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _usage_hook(
+    session: Session | None, scene: str, cfg: dict, document_id: str | None
+):
+    if session is None:
+        return None
+
+    def hook(event: dict) -> None:
+        record_ai_usage(
+            session,
+            scene=scene,
+            provider_id=cfg.get("provider_id"),
+            provider_name=cfg.get("provider_name") or "未命名配置",
+            model=cfg.get("model") or "",
+            document_id=document_id,
+            **event,
+        )
+
+    return hook
 
 
 def get_layout_provider() -> LayoutProvider:
@@ -30,7 +51,7 @@ def get_layout_provider() -> LayoutProvider:
     return MockLayoutProvider()
 
 
-def get_chat_provider(session: Session | None = None):
+def get_chat_provider(session: Session | None = None, document_id: str | None = None):
     """打标用的 LLM provider；未配置 Key 时返回 None，打标自动走本地词表。"""
     cfg = effective_ai_config(session)
     if not cfg["api_key"]:
@@ -38,21 +59,30 @@ def get_chat_provider(session: Session | None = None):
     try:
         from .chat import ChatProvider
 
-        return ChatProvider(api_key=cfg["api_key"], base_url=cfg["base_url"], model=cfg["model"])
+        return ChatProvider(
+            api_key=cfg["api_key"],
+            base_url=cfg["base_url"],
+            model=cfg["model"],
+            on_usage=_usage_hook(session, "知识点打标", cfg, document_id),
+        )
     except Exception as exc:  # pragma: no cover - 配置异常时降级
         logger.warning("chat provider unavailable (%s), fallback to local tagger", exc)
         return None
 
 
-def get_ocr_provider(session: Session | None = None) -> OcrProvider:
+def get_ocr_provider(session: Session | None = None, document_id: str | None = None) -> OcrProvider:
     cfg = effective_ai_config(session)
     if cfg["provider"] == "vlm" and cfg["api_key"]:
         try:
             from .vlm import VlmOcrProvider
 
             return VlmOcrProvider(
-                api_key=cfg["api_key"], base_url=cfg["base_url"], model=cfg["model"]
+                api_key=cfg["api_key"],
+                base_url=cfg["base_url"],
+                model=cfg["model"],
+                on_usage=_usage_hook(session, "OCR 识别", cfg, document_id),
             )
         except Exception as exc:  # pragma: no cover
             logger.warning("vlm ocr provider unavailable (%s), fallback to mock", exc)
     return MockOcrProvider()
+

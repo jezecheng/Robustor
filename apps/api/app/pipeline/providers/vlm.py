@@ -13,11 +13,12 @@ import base64
 import json
 import os
 import re
+import time
 
 import httpx
 
 from ...ai_config import DEFAULT_BASE_URL, DEFAULT_MODEL
-from .chat import chat_endpoint
+from .chat import UsageHook, chat_endpoint
 
 TIMEOUT = 20.0
 
@@ -64,12 +65,14 @@ class VlmOcrProvider:
         api_key: str | None = None,
         base_url: str | None = None,
         model: str | None = None,
+        on_usage: UsageHook | None = None,
     ) -> None:
         self.api_key = api_key or os.environ.get("VLM_API_KEY", "")
         if not self.api_key:
             raise RuntimeError("VLM_API_KEY is not set")
         self.base_url = base_url or os.environ.get("VLM_BASE_URL") or DEFAULT_BASE_URL
         self.model = model or os.environ.get("VLM_MODEL") or DEFAULT_MODEL
+        self.on_usage = on_usage
 
     def recognize(self, image_bytes: bytes, hint: str) -> tuple[str, float]:
         b64 = base64.b64encode(image_bytes).decode("ascii")
@@ -91,15 +94,38 @@ class VlmOcrProvider:
             ],
         }
         headers = {"Authorization": f"Bearer {self.api_key}"}
+        started = time.perf_counter()
+        usage: dict | None = None
         try:
             response = httpx.post(
                 chat_endpoint(self.base_url), json=payload, headers=headers, timeout=TIMEOUT
             )
             response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
+            body = response.json()
+            usage = body.get("usage")
+            content = body["choices"][0]["message"]["content"]
             data = _parse_json(content)
             latex = str(data.get("latex", ""))
             confidence = float(data.get("confidence", 0.0))
         except Exception as exc:  # noqa: BLE001 - 统一转 RuntimeError 由上层兜底
+            self._report(usage, False, started, f"{type(exc).__name__}: {exc}")
             raise RuntimeError(f"vlm ocr failed: {type(exc).__name__}: {exc}") from exc
+        self._report(usage, True, started, None)
         return latex, round(min(1.0, max(0.0, confidence)), 3)
+
+    def _report(
+        self, usage: dict | None, success: bool, started: float, error: str | None
+    ) -> None:
+        if self.on_usage is None:
+            return
+        try:
+            self.on_usage(
+                {
+                    "success": success,
+                    "error": error,
+                    "latency_ms": int((time.perf_counter() - started) * 1000),
+                    "usage": usage,
+                }
+            )
+        except Exception:  # noqa: BLE001 - 用量钩子不能影响主流程
+            pass
