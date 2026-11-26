@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..models import Problem, ProblemTag, Tag, TagEdge
 from ..schemas import (
     TaxonomyFacetOut,
+    TaxonomyGraphEdgeOut,
+    TaxonomyGraphOut,
     TaxonomyNeighborOut,
     TaxonomyPathOut,
     TaxonomySummaryOut,
@@ -125,6 +127,98 @@ def taxonomy_topics(
     if q and q.strip():
         query = query.filter(Tag.name.like(f"%{q.strip()}%"))
     return [_brief(tag) for tag in _order(query.all())]
+
+
+def _expand(session: Session, focus: Tag, depth: int) -> list[Tag]:
+    """从 focus 出发双向扩展 depth 跳，只保留图谱内（有 external_id）的知识点。"""
+    found: dict[str, Tag] = {focus.id: focus}
+    frontier = {focus.id}
+    for _ in range(depth):
+        if not frontier:
+            break
+        rows = (
+            session.query(TagEdge)
+            .filter(or_(TagEdge.from_tag_id.in_(frontier), TagEdge.to_tag_id.in_(frontier)))
+            .all()
+        )
+        next_frontier: set[str] = set()
+        for edge in rows:
+            for tag_id in (edge.from_tag_id, edge.to_tag_id):
+                if tag_id in found:
+                    continue
+                next_frontier.add(tag_id)
+        if not next_frontier:
+            break
+        for tag in session.query(Tag).filter(Tag.id.in_(next_frontier)):
+            if tag.external_id:
+                found[tag.id] = tag
+        frontier = next_frontier
+    return _order(list(found.values()))
+
+
+@router.get("/taxonomy/graph", response_model=TaxonomyGraphOut)
+def taxonomy_graph(
+    subject: str | None = None,
+    domain: str | None = None,
+    grade: int | None = None,
+    chapter: str | None = None,
+    q: str | None = None,
+    focus: str | None = None,
+    depth: int = Query(default=1, ge=1, le=3),
+    limit: int = Query(default=160, ge=20, le=400),
+    session: Session = Depends(get_session),
+) -> TaxonomyGraphOut:
+    """图谱视图数据：一批知识点节点及其之间的先修边。
+
+    - 默认按筛选条件取节点（受 limit 截断，total 为截断前数量）；
+    - 传 focus 时改为聚焦模式，返回该知识点 depth 跳内的先修邻域。
+    """
+    if focus:
+        center = session.get(Tag, focus)
+        if center is None or not center.external_id:
+            raise HTTPException(status_code=404, detail="知识点不存在")
+        tags = _expand(session, center, depth)
+        total = len(tags)
+        truncated = False
+    else:
+        query = session.query(Tag).filter(Tag.external_id.is_not(None))
+        if subject:
+            query = query.filter(Tag.subject == subject)
+        if domain:
+            query = query.filter(Tag.domain == domain)
+        if grade is not None:
+            query = query.filter(Tag.grade == grade)
+        if chapter:
+            query = query.filter(Tag.chapter == chapter)
+        if q and q.strip():
+            query = query.filter(Tag.name.like(f"%{q.strip()}%"))
+        total = query.count()
+        tags = _order(query.all())[:limit]
+        truncated = total > len(tags)
+
+    ids = [tag.id for tag in tags]
+    edges: list[TaxonomyGraphEdgeOut] = []
+    if ids:
+        rows = (
+            session.query(TagEdge)
+            .filter(TagEdge.from_tag_id.in_(ids), TagEdge.to_tag_id.in_(ids))
+            .all()
+        )
+        edges = [
+            TaxonomyGraphEdgeOut(
+                source=edge.from_tag_id,
+                target=edge.to_tag_id,
+                strength=edge.strength,
+                reason=edge.reason or "",
+            )
+            for edge in rows
+        ]
+    return TaxonomyGraphOut(
+        nodes=[_brief(tag) for tag in tags],
+        edges=edges,
+        total=total,
+        truncated=truncated,
+    )
 
 
 @router.get("/taxonomy/topics/{tag_id}", response_model=TaxonomyTopicDetailOut)

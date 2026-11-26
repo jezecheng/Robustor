@@ -297,6 +297,20 @@ class TaxonomyPathOut(BaseModel):
     prerequisites: list[TaxonomyTopicBriefOut] = Field(default_factory=list)
 
 
+class TaxonomyGraphEdgeOut(BaseModel):
+    source: str
+    target: str
+    strength: str = "hard"
+    reason: str = ""
+
+
+class TaxonomyGraphOut(BaseModel):
+    nodes: list[TaxonomyTopicBriefOut] = Field(default_factory=list)
+    edges: list[TaxonomyGraphEdgeOut] = Field(default_factory=list)
+    total: int = 0
+    truncated: bool = False
+
+
 # ---------------------------------------------------------------- 墨迹方案
 
 

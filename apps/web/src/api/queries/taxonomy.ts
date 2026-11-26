@@ -45,11 +45,32 @@ export type TaxonomyPath = {
   prerequisites: TaxonomyTopic[]
 }
 
+export type TaxonomyGraphEdge = {
+  source: string
+  target: string
+  strength: string
+  reason: string
+}
+
+export type TaxonomyGraph = {
+  nodes: TaxonomyTopic[]
+  edges: TaxonomyGraphEdge[]
+  total: number
+  truncated: boolean
+}
+
 export type TaxonomyTopicParams = {
   subject?: string
   domain?: string
   grade?: number
   q?: string
+}
+
+export type TaxonomyGraphParams = TaxonomyTopicParams & {
+  chapter?: string
+  focus?: string
+  depth?: number
+  limit?: number
 }
 
 export function getTaxonomySummary() {
@@ -68,6 +89,20 @@ export function listTaxonomyTopics(params: TaxonomyTopicParams = {}) {
 
 export function getTaxonomyTopic(tagId: string) {
   return apiFetch<TaxonomyDetail>(`/taxonomy/topics/${tagId}`)
+}
+
+export function getTaxonomyGraph(params: TaxonomyGraphParams = {}) {
+  const search = new URLSearchParams()
+  if (params.subject) search.set('subject', params.subject)
+  if (params.domain) search.set('domain', params.domain)
+  if (params.grade !== undefined) search.set('grade', String(params.grade))
+  if (params.chapter) search.set('chapter', params.chapter)
+  if (params.q?.trim()) search.set('q', params.q.trim())
+  if (params.focus) search.set('focus', params.focus)
+  if (params.depth !== undefined) search.set('depth', String(params.depth))
+  if (params.limit !== undefined) search.set('limit', String(params.limit))
+  const qs = search.toString()
+  return apiFetch<TaxonomyGraph>(`/taxonomy/graph${qs ? `?${qs}` : ''}`)
 }
 
 export function getProblemPath(problemId: string) {
@@ -92,6 +127,14 @@ export function useTaxonomyTopic(tagId: string | undefined) {
     queryKey: ['taxonomy', 'topic', tagId],
     queryFn: () => getTaxonomyTopic(tagId as string),
     enabled: Boolean(tagId),
+  })
+}
+
+export function useTaxonomyGraph(params: TaxonomyGraphParams | undefined) {
+  return useQuery({
+    queryKey: ['taxonomy', 'graph', params],
+    queryFn: () => getTaxonomyGraph(params),
+    enabled: Boolean(params),
   })
 }
 
