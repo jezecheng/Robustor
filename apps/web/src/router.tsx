@@ -5,6 +5,7 @@ import Console from './pages/Console'
 import WrongBook from './pages/WrongBook'
 import ProblemDetail from './pages/ProblemDetail'
 import Stats from './pages/Stats'
+import KnowledgeGraph from './pages/KnowledgeGraph'
 import Settings from './pages/Settings'
 
 export const router = createBrowserRouter([
@@ -17,6 +18,7 @@ export const router = createBrowserRouter([
       { path: 'console/:documentId', element: <Console /> },
       { path: 'problems', element: <WrongBook /> },
       { path: 'problems/:problemId', element: <ProblemDetail /> },
+      { path: 'knowledge', element: <KnowledgeGraph /> },
       { path: 'stats', element: <Stats /> },
       { path: 'settings', element: <Settings /> },
     ],

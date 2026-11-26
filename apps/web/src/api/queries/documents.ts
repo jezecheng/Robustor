@@ -62,3 +62,25 @@ export function useRetryJob() {
     },
   })
 }
+
+/** 删除一次上传；deleteProblems=false 时保留已入库错题。 */
+export function useDeleteDocument() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      documentId,
+      deleteProblems,
+    }: {
+      documentId: string
+      deleteProblems: boolean
+    }) =>
+      apiFetch<void>(`/documents/${documentId}?delete_problems=${deleteProblems}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['documents'] })
+      void queryClient.invalidateQueries({ queryKey: ['problems'] })
+      void queryClient.invalidateQueries({ queryKey: ['stats'] })
+    },
+  })
+}

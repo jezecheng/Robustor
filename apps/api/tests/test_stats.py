@@ -45,13 +45,14 @@ def data(client):
         session.add_all([math_problem, physics_problem])
         session.flush()
 
-        tags = {tag.name: tag.id for tag in session.query(Tag).all()}
+        # 知识图谱可能与种子标签同名，按 (type, name) 取，避免覆盖。
+        tags = {(tag.type, tag.name): tag.id for tag in session.query(Tag).all()}
         links = [
-            (math_problem.id, tags["一元二次方程"]),
-            (math_problem.id, tags["因式分解"]),
-            (math_problem.id, tags["因式分解法"]),
-            (physics_problem.id, tags["勾股定理"]),
-            (physics_problem.id, tags["数形结合"]),
+            (math_problem.id, tags[("knowledge", "一元二次方程")]),
+            (math_problem.id, tags[("knowledge", "因式分解")]),
+            (math_problem.id, tags[("method", "因式分解法")]),
+            (physics_problem.id, tags[("knowledge", "勾股定理")]),
+            (physics_problem.id, tags[("method", "数形结合")]),
         ]
         for problem_id, tag_id in links:
             session.add(ProblemTag(problem_id=problem_id, tag_id=tag_id, weight=1.0, source="ai"))

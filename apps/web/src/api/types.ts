@@ -1154,7 +1154,10 @@ export interface operations {
     };
     delete_document_api_documents__document_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 是否同时删除该作业产生的错题；传 false 时保留已入库错题 */
+                delete_problems?: boolean;
+            };
             header?: never;
             path: {
                 document_id: string;

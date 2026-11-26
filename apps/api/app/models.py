@@ -132,6 +132,32 @@ class Tag(Base):
     parent_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
 
+    # 知识图谱扩展（来自 cn-math-taxonomy；手工标签这些字段为 NULL）
+    external_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    subject: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    domain: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    grade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    semester: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    chapter: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    topic_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mastery_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    diagnostic_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    standards_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+
+class TagEdge(Base):
+    """先修关系：from（前置知识点）→ to（后继知识点）。"""
+
+    __tablename__ = "tag_edge"
+    __table_args__ = (UniqueConstraint("from_tag_id", "to_tag_id", name="uq_tag_edge"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    from_tag_id: Mapped[str] = mapped_column(ForeignKey("tag.id"), index=True)
+    to_tag_id: Mapped[str] = mapped_column(ForeignKey("tag.id"), index=True)
+    strength: Mapped[str] = mapped_column(String(8), default="hard")
+    reason: Mapped[str] = mapped_column(Text, default="")
+
 
 class ProblemTag(Base):
     __tablename__ = "problem_tag"

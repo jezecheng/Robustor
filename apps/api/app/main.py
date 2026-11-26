@@ -12,9 +12,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import MEDIA_DIR, REPO_ROOT, ensure_dirs
-from .db import init_db
+from .db import SessionLocal, init_db
 from .routes import api_router
 from .seeds import seed_all
+from .taxonomy import import_taxonomy
 
 logging.basicConfig(level=logging.INFO)
 
@@ -40,6 +41,8 @@ async def lifespan(app: FastAPI):
     ensure_dirs()
     init_db()
     seed_all()
+    with SessionLocal() as session:
+        import_taxonomy(session)
     yield
 
 

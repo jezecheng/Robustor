@@ -10,6 +10,7 @@ API_DIR = APP_DIR.parent                           # apps/api
 REPO_ROOT = API_DIR.parents[1]                     # Robustor
 
 DATA_DIR = Path(os.environ.get("RB_DATA_DIR", REPO_ROOT / "data")).resolve()
+TAXONOMY_DIR = Path(os.environ.get("RB_TAXONOMY_DIR", REPO_ROOT / "taxonomy")).resolve()
 MEDIA_DIR = DATA_DIR / "media"
 UPLOAD_DIR = MEDIA_DIR / "uploads"
 PAGE_DIR = MEDIA_DIR / "pages"

@@ -21,7 +21,11 @@ def test_openapi_available(client):
 def test_seeded_tags(client):
     from app.db import SessionLocal
     from app.models import InkProfile, Tag
+    from app.taxonomy import load_topics
 
     with SessionLocal() as session:
-        assert session.query(Tag).count() == 60
+        # 60 个种子标签 + 内置知识图谱（同步后 external_id 非空）
+        assert session.query(Tag).filter(Tag.external_id.is_(None)).count() >= 55
+        assert session.query(Tag).filter(Tag.external_id.is_not(None)).count() == len(load_topics())
+        assert session.query(Tag).filter(Tag.name == "一元二次方程").count() >= 1
         assert session.query(InkProfile).filter(InkProfile.is_default.is_(True)).count() == 1

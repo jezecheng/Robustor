@@ -4,7 +4,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { Chip } from '../ui/Chip'
-import { useDocuments, useJob, useRetryJob, useUploadDocuments } from '../api/queries/documents'
+import { Sheet } from '../ui/Sheet'
+import {
+  useDeleteDocument,
+  useDocuments,
+  useJob,
+  useRetryJob,
+  useUploadDocuments,
+} from '../api/queries/documents'
 import type { components } from '../api/types'
 
 type JobOut = components['schemas']['JobOut']
@@ -56,13 +63,44 @@ export default function Upload() {
   const [subject, setSubject] = useState('math')
   const [dragging, setDragging] = useState(false)
   const [created, setCreated] = useState<{ documentId: string; jobId: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+    pageCount: number
+    problemCount: number
+  } | null>(null)
+  const [deleteProblems, setDeleteProblems] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
 
   const documents = useDocuments()
   const upload = useUploadDocuments()
   const retry = useRetryJob()
+  const remove = useDeleteDocument()
   const job = useJob(created?.jobId)
+
+  const openDelete = (target: {
+    id: string
+    name: string
+    pageCount: number
+    problemCount: number
+  }) => {
+    setDeleteProblems(true)
+    setDeleteTarget(target)
+  }
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return
+    remove.mutate(
+      { documentId: deleteTarget.id, deleteProblems },
+      {
+        onSuccess: () => {
+          if (created?.documentId === deleteTarget.id) setCreated(null)
+          setDeleteTarget(null)
+        },
+      },
+    )
+  }
 
   useEffect(() => {
     if (created && job.data?.status === 'done') {
@@ -271,14 +309,83 @@ export default function Upload() {
                     {document.source_name || '未命名'} · {new Date(document.created_at).toLocaleString('zh-CN')}
                   </div>
                 </div>
-                <Link to={`/console/${document.id}`} className="btn btn-secondary btn-sm">
-                  进入校对台
-                </Link>
+                <div className="row" style={{ gap: 8 }}>
+                  <Link to={`/console/${document.id}`} className="btn btn-secondary btn-sm">
+                    进入校对台
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      openDelete({
+                        id: document.id,
+                        name: document.source_name || '未命名',
+                        pageCount: document.page_count,
+                        problemCount: document.problem_count,
+                      })
+                    }
+                    title="删除这次上传"
+                  >
+                    删除
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      <Sheet
+        open={Boolean(deleteTarget)}
+        title="删除作业"
+        onClose={() => {
+          if (!remove.isPending) setDeleteTarget(null)
+        }}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setDeleteTarget(null)}
+              disabled={remove.isPending}
+            >
+              取消
+            </Button>
+            <Button variant="danger" onClick={confirmDelete} disabled={remove.isPending}>
+              {remove.isPending ? '删除中…' : '确认删除'}
+            </Button>
+          </>
+        }
+      >
+        {deleteTarget && (
+          <div className="stack">
+            <div>
+              将删除「{deleteTarget.name}」的 {deleteTarget.pageCount} 页图片、区域与识别结果，此操作不可撤销。
+            </div>
+            <label
+              className="row"
+              style={{ gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}
+            >
+              <input
+                type="checkbox"
+                checked={deleteProblems && deleteTarget.problemCount > 0}
+                disabled={deleteTarget.problemCount === 0}
+                onChange={(event) => setDeleteProblems(event.target.checked)}
+                style={{ marginTop: 3, accentColor: 'var(--danger)' }}
+              />
+              <span>
+                <strong>同时删除相关错题</strong>
+                <span className="muted" style={{ display: 'block', fontSize: 12 }}>
+                  {deleteTarget.problemCount > 0
+                    ? deleteProblems
+                      ? `错题本中由该作业生成的 ${deleteTarget.problemCount} 道题会一并删除。`
+                      : `这 ${deleteTarget.problemCount} 道题会保留在错题本中，仅删除原始图片与识别结果。`
+                    : '该作业没有已入库的题目。'}
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
+      </Sheet>
     </div>
   )
 }

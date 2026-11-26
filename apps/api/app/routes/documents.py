@@ -11,6 +11,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     UploadFile,
 )
 from sqlalchemy import func
@@ -152,7 +153,14 @@ def _unlink(storage: Storage, rel: str) -> None:
 
 
 @router.delete("/documents/{document_id}", status_code=204)
-def delete_document(document_id: str, session: Session = Depends(get_session)) -> None:
+def delete_document(
+    document_id: str,
+    delete_problems: bool = Query(
+        default=True,
+        description="是否同时删除该作业产生的错题；传 false 时保留已入库错题",
+    ),
+    session: Session = Depends(get_session),
+) -> None:
     if session.get(Document, document_id) is None:
         raise HTTPException(status_code=404, detail="文档不存在")
 
@@ -165,28 +173,48 @@ def delete_document(document_id: str, session: Session = Depends(get_session)) -
         for row in session.query(Region.id).filter(Region.document_id == document_id).all()
     ]
 
+    # 保留错题时只保住已入库的题；draft 是流水线中间产物，随作业一起清理。
+    # 保留的题目仍记录原 document_id 作为来源标识（SQLite 未开启外键强约束，不会阻塞删除）。
+    kept_ids: set[str] = set()
+    if not delete_problems:
+        kept_ids = {
+            row[0]
+            for row in session.query(Problem.id)
+            .filter(Problem.document_id == document_id, Problem.status == "confirmed")
+            .all()
+        }
+    removed_ids = [problem_id for problem_id in problem_ids if problem_id not in kept_ids]
+
     image_paths: list[str] = []
-    if problem_ids:
-        session.query(Mark).filter(Mark.problem_id.in_(problem_ids)).delete(
+    if removed_ids:
+        session.query(Mark).filter(Mark.problem_id.in_(removed_ids)).delete(
             synchronize_session=False
         )
-        session.query(ProblemTag).filter(ProblemTag.problem_id.in_(problem_ids)).delete(
+        session.query(ProblemTag).filter(ProblemTag.problem_id.in_(removed_ids)).delete(
             synchronize_session=False
         )
-        session.query(Review).filter(Review.problem_id.in_(problem_ids)).delete(
+        session.query(Review).filter(Review.problem_id.in_(removed_ids)).delete(
             synchronize_session=False
         )
-        session.query(Solution).filter(Solution.problem_id.in_(problem_ids)).delete(
+        session.query(Solution).filter(Solution.problem_id.in_(removed_ids)).delete(
             synchronize_session=False
         )
         image_paths = [
             row[0]
             for row in session.query(ProblemImage.image_path)
-            .filter(ProblemImage.problem_id.in_(problem_ids))
+            .filter(ProblemImage.problem_id.in_(removed_ids))
             .all()
         ]
-        session.query(ProblemImage).filter(ProblemImage.problem_id.in_(problem_ids)).delete(
+        session.query(ProblemImage).filter(ProblemImage.problem_id.in_(removed_ids)).delete(
             synchronize_session=False
+        )
+    if kept_ids:
+        # 区域即将删除，保留的错题不应再指向证据层。
+        session.query(Mark).filter(Mark.problem_id.in_(kept_ids)).update(
+            {Mark.region_id: None}, synchronize_session=False
+        )
+        session.query(ProblemImage).filter(ProblemImage.problem_id.in_(kept_ids)).update(
+            {ProblemImage.region_id: None}, synchronize_session=False
         )
     if region_ids:
         session.query(Mark).filter(Mark.region_id.in_(region_ids)).delete(
@@ -196,9 +224,10 @@ def delete_document(document_id: str, session: Session = Depends(get_session)) -
     session.query(Region).filter(Region.document_id == document_id).delete(
         synchronize_session=False
     )
-    session.query(Problem).filter(Problem.document_id == document_id).delete(
-        synchronize_session=False
-    )
+    if removed_ids:
+        session.query(Problem).filter(Problem.id.in_(removed_ids)).delete(
+            synchronize_session=False
+        )
     session.query(Page).filter(Page.document_id == document_id).delete(synchronize_session=False)
     session.query(Job).filter(Job.document_id == document_id).delete(synchronize_session=False)
     session.query(Document).filter(Document.id == document_id).delete(synchronize_session=False)

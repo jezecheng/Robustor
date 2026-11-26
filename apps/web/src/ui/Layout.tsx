@@ -5,6 +5,7 @@ import type { ApiError } from '../api/client'
 const NAV = [
   { to: '/upload', label: '上传', hint: '拍照 / 选图入库', end: false },
   { to: '/problems', label: '错题本', hint: '筛选、详情、复习', end: false },
+  { to: '/knowledge', label: '知识图谱', hint: '知识点与先修关系', end: false },
   { to: '/stats', label: '统计', hint: '知识点与方法论', end: false },
   { to: '/settings', label: '设置', hint: '墨迹方案 / 词表', end: false },
 ]

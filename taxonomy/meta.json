@@ -1,0 +1,80 @@
+{
+  "source": "https://github.com/xiaoyang111222/cn-math-taxonomy",
+  "commit": "4e87079b378236e282cde238ef1dcd9f211eb9f5",
+  "license": "CC BY-NC 4.0",
+  "subjects": [
+    {
+      "key": "math",
+      "name": "数学",
+      "topics": 870,
+      "edges": 1459
+    },
+    {
+      "key": "chinese",
+      "name": "语文",
+      "topics": 827,
+      "edges": 1148
+    },
+    {
+      "key": "english",
+      "name": "英语",
+      "topics": 791,
+      "edges": 1028
+    },
+    {
+      "key": "physics",
+      "name": "物理",
+      "topics": 269,
+      "edges": 637
+    },
+    {
+      "key": "chemistry",
+      "name": "化学",
+      "topics": 147,
+      "edges": 285
+    },
+    {
+      "key": "biology",
+      "name": "生物",
+      "topics": 201,
+      "edges": 342
+    },
+    {
+      "key": "history",
+      "name": "历史",
+      "topics": 254,
+      "edges": 513
+    },
+    {
+      "key": "geography",
+      "name": "地理",
+      "topics": 178,
+      "edges": 302
+    },
+    {
+      "key": "politics",
+      "name": "政治",
+      "topics": 153,
+      "edges": 252
+    },
+    {
+      "key": "morality",
+      "name": "道德与法治",
+      "topics": 269,
+      "edges": 386
+    },
+    {
+      "key": "science",
+      "name": "科学",
+      "topics": 262,
+      "edges": 329
+    }
+  ],
+  "counts": {
+    "topics": 4221,
+    "edges": 6681,
+    "hard": 3564,
+    "soft": 3117
+  },
+  "note": "内置全部 11 个学科；知识点与先修边按上游原样裁剪，仅补充 math 的 subject 字段。"
+}

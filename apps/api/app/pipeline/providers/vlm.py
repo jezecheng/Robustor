@@ -17,6 +17,7 @@ import re
 import httpx
 
 from ...ai_config import DEFAULT_BASE_URL, DEFAULT_MODEL
+from .chat import chat_endpoint
 
 TIMEOUT = 20.0
 
@@ -92,7 +93,7 @@ class VlmOcrProvider:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
             response = httpx.post(
-                self.base_url, json=payload, headers=headers, timeout=TIMEOUT
+                chat_endpoint(self.base_url), json=payload, headers=headers, timeout=TIMEOUT
             )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]

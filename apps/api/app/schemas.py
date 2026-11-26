@@ -244,6 +244,59 @@ class ReviewOut(BaseModel):
     due_at: datetime
 
 
+# ---------------------------------------------------------------- 知识图谱
+
+
+class TaxonomyTopicBriefOut(BaseModel):
+    id: str
+    name: str
+    subject: str | None = None
+    domain: str | None = None
+    grade: int | None = None
+    semester: str | None = None
+    chapter: str | None = None
+    topic_type: str | None = None
+
+
+class TaxonomyTopicOut(TaxonomyTopicBriefOut):
+    external_id: str = ""
+    description: str = ""
+    mastery_criteria: list[str] = Field(default_factory=list)
+    diagnostic_question: dict[str, Any] | None = None
+    standards: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class TaxonomyNeighborOut(TaxonomyTopicBriefOut):
+    strength: str = "hard"
+    reason: str = ""
+
+
+class TaxonomyTopicDetailOut(TaxonomyTopicOut):
+    prerequisites: list[TaxonomyNeighborOut] = Field(default_factory=list)
+    dependents: list[TaxonomyNeighborOut] = Field(default_factory=list)
+    ancestors: list[TaxonomyTopicBriefOut] = Field(default_factory=list)
+
+
+class TaxonomyFacetOut(BaseModel):
+    value: str
+    count: int
+
+
+class TaxonomySummaryOut(BaseModel):
+    topics: int = 0
+    edges: int = 0
+    subjects: list[TaxonomyFacetOut] = Field(default_factory=list)
+    source: str = ""
+    license: str = ""
+    commit: str = ""
+
+
+class TaxonomyPathOut(BaseModel):
+    problem_id: str
+    knowledge: list[TaxonomyTopicBriefOut] = Field(default_factory=list)
+    prerequisites: list[TaxonomyTopicBriefOut] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------- 墨迹方案
 
 

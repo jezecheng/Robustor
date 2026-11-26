@@ -7,6 +7,7 @@ import { Card } from '../ui/Card'
 import { Tag } from '../ui/Tag'
 import Latex from '../components/common/Latex'
 import { useProblem, usePutTags, useReviewProblem, useTags } from '../api/queries/problems'
+import { useProblemPath } from '../api/queries/taxonomy'
 import type { ProblemOut, TagType, Verdict } from '../api/queries/problems'
 
 const SUBJECT_LABEL: Record<string, string> = {
@@ -104,6 +105,7 @@ export default function ProblemDetail() {
     { status: 'approved', q: tagQuery.trim() },
     tagQuery.trim().length > 0,
   )
+  const taxonomyPath = useProblemPath(problemId)
 
   if (!problemId) {
     return (
@@ -152,6 +154,7 @@ export default function ProblemDetail() {
   const knowledgeIds = tags.filter((tag) => tag.type === 'knowledge').map((tag) => tag.id)
   const methodIds = tags.filter((tag) => tag.type === 'method').map((tag) => tag.id)
   const existingIds = new Set(tags.map((tag) => tag.id))
+  const taxonomyIds = new Set((taxonomyPath.data?.knowledge ?? []).map((topic) => topic.id))
 
   const saveTags = (knowledge: string[], method: string[]) => {
     setTagNotice('')
@@ -265,7 +268,17 @@ export default function ProblemDetail() {
                   onRemove={() => removeTag(tag.id, tag.type)}
                   title={tag.type === 'knowledge' ? '知识点' : '方法论'}
                 >
-                  {tag.name}
+                  {taxonomyIds.has(tag.id) ? (
+                    <Link
+                      to={`/knowledge?topic=${tag.id}`}
+                      style={{ color: 'inherit' }}
+                      title="在知识图谱中查看"
+                    >
+                      {tag.name}
+                    </Link>
+                  ) : (
+                    tag.name
+                  )}
                 </Tag>
               ))}
               {!tags.length && <span className="muted">暂无标签</span>}
@@ -316,6 +329,63 @@ export default function ProblemDetail() {
             )}
 
             {tagNotice && <span className="muted">{tagNotice}</span>}
+          </div>
+        </Card>
+
+        <Card title="前置知识" subtitle="来自知识图谱的先修关系">
+          <div className="stack" style={{ gap: 10 }}>
+            {taxonomyPath.isLoading && <span className="muted">加载中…</span>}
+            {!taxonomyPath.isLoading && !(taxonomyPath.data?.knowledge ?? []).length && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                为本题添加已收录的知识点后，这里会展示它的前置知识链。
+              </span>
+            )}
+            {(taxonomyPath.data?.knowledge ?? []).length > 0 && (
+              <>
+                <div className="row-wrap" style={{ gap: 6 }}>
+                  {taxonomyPath.data!.knowledge.map((topic) => (
+                    <Link key={topic.id} to={`/knowledge?topic=${topic.id}`} className="tag">
+                      {topic.name}
+                    </Link>
+                  ))}
+                </div>
+                {taxonomyPath.data!.prerequisites.length > 0 ? (
+                  <>
+                    <div className="card-sub">
+                      全部前置 {taxonomyPath.data!.prerequisites.length} 个（按学段排序）
+                    </div>
+                    <div className="row-wrap" style={{ gap: 6 }}>
+                      {taxonomyPath.data!.prerequisites.slice(0, 12).map((topic) => (
+                        <Link
+                          key={topic.id}
+                          to={`/knowledge?topic=${topic.id}`}
+                          className="tag"
+                          title={topic.chapter ?? undefined}
+                        >
+                          {topic.name}
+                        </Link>
+                      ))}
+                      {taxonomyPath.data!.prerequisites.length > 12 && (
+                        <span className="muted" style={{ fontSize: 12 }}>
+                          +{taxonomyPath.data!.prerequisites.length - 12}
+                        </span>
+                      )}
+                    </div>
+                    <Link
+                      to={`/knowledge?topic=${taxonomyPath.data!.knowledge[0].id}`}
+                      className="muted"
+                      style={{ fontSize: 12 }}
+                    >
+                      在知识图谱中查看完整前置链 →
+                    </Link>
+                  </>
+                ) : (
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    该知识点无先修依赖。
+                  </span>
+                )}
+              </>
+            )}
           </div>
         </Card>
 

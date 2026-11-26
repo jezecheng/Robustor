@@ -30,6 +30,20 @@ def get_layout_provider() -> LayoutProvider:
     return MockLayoutProvider()
 
 
+def get_chat_provider(session: Session | None = None):
+    """打标用的 LLM provider；未配置 Key 时返回 None，打标自动走本地词表。"""
+    cfg = effective_ai_config(session)
+    if not cfg["api_key"]:
+        return None
+    try:
+        from .chat import ChatProvider
+
+        return ChatProvider(api_key=cfg["api_key"], base_url=cfg["base_url"], model=cfg["model"])
+    except Exception as exc:  # pragma: no cover - 配置异常时降级
+        logger.warning("chat provider unavailable (%s), fallback to local tagger", exc)
+        return None
+
+
 def get_ocr_provider(session: Session | None = None) -> OcrProvider:
     cfg = effective_ai_config(session)
     if cfg["provider"] == "vlm" and cfg["api_key"]:
