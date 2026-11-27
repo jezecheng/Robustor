@@ -256,6 +256,16 @@ class TaxonomyTopicBriefOut(BaseModel):
     semester: str | None = None
     chapter: str | None = None
     topic_type: str | None = None
+    cluster: str | None = None
+    cluster_parent: str | None = None
+
+
+class TaxonomyClusterOut(BaseModel):
+    id: str
+    subject: str
+    parent: str = ""
+    name: str
+    count: int = 0
 
 
 class TaxonomyTopicOut(TaxonomyTopicBriefOut):

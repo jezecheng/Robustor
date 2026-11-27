@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..db import get_session
 from ..models import Problem, ProblemTag, Tag, TagEdge
 from ..schemas import (
+    TaxonomyClusterOut,
     TaxonomyFacetOut,
     TaxonomyGraphEdgeOut,
     TaxonomyGraphOut,
@@ -18,6 +19,13 @@ from ..schemas import (
     TaxonomyTopicBriefOut,
     TaxonomyTopicDetailOut,
     TaxonomyTopicOut,
+)
+from ..clusters import (
+    cluster_name_of,
+    cluster_parent_of,
+    clusters_of,
+    member_ids,
+    parent_member_ids,
 )
 from ..taxonomy import load_meta
 
@@ -36,6 +44,8 @@ def _brief(tag: Tag) -> TaxonomyTopicBriefOut:
         semester=tag.semester,
         chapter=tag.chapter,
         topic_type=tag.topic_type,
+        cluster=cluster_name_of(tag.external_id),
+        cluster_parent=cluster_parent_of(tag.external_id),
     )
 
 
@@ -106,6 +116,32 @@ def taxonomy_summary(session: Session = Depends(get_session)) -> TaxonomySummary
     )
 
 
+@router.get("/taxonomy/clusters", response_model=list[TaxonomyClusterOut])
+def taxonomy_clusters(
+    subject: str | None = None,
+    parent: str | None = None,
+    session: Session = Depends(get_session),
+) -> list[TaxonomyClusterOut]:
+    """主题分组列表（含分组内知识点数量）。parent 用于取某个领域的二级分组。"""
+    result: list[TaxonomyClusterOut] = []
+    for cluster in clusters_of(subject, parent):
+        count = (
+            session.query(Tag)
+            .filter(Tag.external_id.in_(cluster["members"]))
+            .count()
+        )
+        result.append(
+            TaxonomyClusterOut(
+                id=cluster["id"],
+                subject=cluster["subject"],
+                parent=cluster["parent"],
+                name=cluster["name"],
+                count=count,
+            )
+        )
+    return result
+
+
 @router.get("/taxonomy/topics", response_model=list[TaxonomyTopicBriefOut])
 def taxonomy_topics(
     subject: str | None = None,
@@ -113,6 +149,8 @@ def taxonomy_topics(
     grade: int | None = None,
     q: str | None = None,
     chapter: str | None = None,
+    cluster: str | None = None,
+    parent: str | None = None,
     session: Session = Depends(get_session),
 ) -> list[TaxonomyTopicBriefOut]:
     query = session.query(Tag).filter(Tag.external_id.is_not(None))
@@ -124,6 +162,16 @@ def taxonomy_topics(
         query = query.filter(Tag.grade == grade)
     if chapter:
         query = query.filter(Tag.chapter == chapter)
+    if parent:
+        members = parent_member_ids(subject, parent)
+        if not members:
+            return []
+        query = query.filter(Tag.external_id.in_(members))
+    if cluster:
+        members = member_ids(cluster)
+        if not members:
+            return []
+        query = query.filter(Tag.external_id.in_(members))
     if q and q.strip():
         query = query.filter(Tag.name.like(f"%{q.strip()}%"))
     return [_brief(tag) for tag in _order(query.all())]
@@ -163,6 +211,8 @@ def taxonomy_graph(
     grade: int | None = None,
     chapter: str | None = None,
     q: str | None = None,
+    cluster: str | None = None,
+    parent: str | None = None,
     focus: str | None = None,
     depth: int = Query(default=1, ge=1, le=3),
     limit: int = Query(default=160, ge=20, le=400),
@@ -190,6 +240,16 @@ def taxonomy_graph(
             query = query.filter(Tag.grade == grade)
         if chapter:
             query = query.filter(Tag.chapter == chapter)
+        if parent:
+            members = parent_member_ids(subject, parent)
+            if not members:
+                return TaxonomyGraphOut(nodes=[], edges=[], total=0, truncated=False)
+            query = query.filter(Tag.external_id.in_(members))
+        if cluster:
+            members = member_ids(cluster)
+            if not members:
+                return TaxonomyGraphOut(nodes=[], edges=[], total=0, truncated=False)
+            query = query.filter(Tag.external_id.in_(members))
         if q and q.strip():
             query = query.filter(Tag.name.like(f"%{q.strip()}%"))
         total = query.count()

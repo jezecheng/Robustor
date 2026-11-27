@@ -3,12 +3,14 @@ import { useSearchParams } from 'react-router-dom'
 import { Chip } from '../ui/Chip'
 import GraphCanvas, { type GraphCanvasHandle } from '../components/knowledge/GraphCanvas'
 import {
+  useTaxonomyClusters,
   useTaxonomyGraph,
   useTaxonomySummary,
   useTaxonomyTopic,
   useTaxonomyTopics,
 } from '../api/queries/taxonomy'
 import type {
+  TaxonomyCluster,
   TaxonomyDetail,
   TaxonomyGraphParams,
   TaxonomyTopic,
@@ -60,13 +62,6 @@ function gradeLabel(grade: number | null, book?: string | null): string {
   return book || `高中 G${grade}`
 }
 
-function chapterLabel(grade: number | null, chapter: string | null): string {
-  const book = bookOf(chapter)
-  if (book && chapter) return chapter.replace(BOOK_RE, '')
-  if (chapter) return chapter
-  return gradeLabel(grade)
-}
-
 function TopicDetail({ topic, onPick }: { topic: TaxonomyDetail; onPick: (id: string) => void }) {
   const [showAnswer, setShowAnswer] = useState(false)
   const [showAllAncestors, setShowAllAncestors] = useState(false)
@@ -87,6 +82,9 @@ function TopicDetail({ topic, onPick }: { topic: TaxonomyDetail; onPick: (id: st
       <div className="row-wrap" style={{ gap: 6 }}>
         {topic.subject && <Chip>{SUBJECT_LABELS[topic.subject] ?? topic.subject}</Chip>}
         {topic.domain && <Chip>{topic.domain}</Chip>}
+        {topic.cluster && (
+          <Chip>{topic.cluster_parent ? `${topic.cluster_parent} / ${topic.cluster}` : topic.cluster}</Chip>
+        )}
         {topic.topic_type && <Chip>{TYPE_LABEL[topic.topic_type] ?? topic.topic_type}</Chip>}
         <Chip title={topic.external_id}>{topic.external_id}</Chip>
       </div>
@@ -202,10 +200,10 @@ function TopicDetail({ topic, onPick }: { topic: TaxonomyDetail; onPick: (id: st
 export default function KnowledgeGraph() {
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedId = searchParams.get('topic') ?? undefined
-  const [subject, setSubject] = useState('math')
-  const [domain, setDomain] = useState('')
+  const [subject, setSubject] = useState('')
+  const [clusterParent, setClusterParent] = useState('')
   const [grade, setGrade] = useState('')
-  const [chapter, setChapter] = useState('')
+  const [clusterId, setClusterId] = useState('')
   const [q, setQ] = useState('')
   const [view, setView] = useState<'graph' | 'tree'>('graph')
   const [mode, setMode] = useState<'full' | 'local'>('full')
@@ -216,6 +214,7 @@ export default function KnowledgeGraph() {
 
   const summary = useTaxonomySummary()
   const topics = useTaxonomyTopics({})
+  const clusters = useTaxonomyClusters(subject || undefined)
   const detail = useTaxonomyTopic(selectedId)
 
   const pick = (id: string) => setSearchParams({ topic: id })
@@ -223,9 +222,9 @@ export default function KnowledgeGraph() {
   const jump = (topic: TaxonomyTopic) => {
     if (topic.subject && topic.subject !== subject) {
       setSubject(topic.subject)
-      setDomain('')
+      setClusterParent('')
       setGrade('')
-      setChapter('')
+      setClusterId('')
     }
     pick(topic.id)
     setToolSearch(topic.name)
@@ -236,9 +235,9 @@ export default function KnowledgeGraph() {
   useEffect(() => {
     if (detail.data?.subject && detail.data.subject !== subject) {
       setSubject(detail.data.subject)
-      setDomain('')
+      setClusterParent('')
       setGrade('')
-      setChapter('')
+      setClusterId('')
     }
   }, [detail.data?.subject])
 
@@ -256,14 +255,13 @@ export default function KnowledgeGraph() {
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
   }, [topics.data])
 
-  const domainFacets = useMemo(() => {
+  const primaryClusters = useMemo(() => {
     const map = new Map<string, number>()
-    for (const topic of subjectTopics) {
-      if (!topic.domain) continue
-      map.set(topic.domain, (map.get(topic.domain) ?? 0) + 1)
+    for (const item of clusters.data ?? []) {
+      map.set(item.parent, (map.get(item.parent) ?? 0) + item.count)
     }
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
-  }, [subjectTopics])
+    return Array.from(map.entries())
+  }, [clusters.data])
 
   const gradeFacets = useMemo(() => {
     const map = new Map<number, { count: number; book: string | null }>()
@@ -279,39 +277,35 @@ export default function KnowledgeGraph() {
   const scopedTopics = useMemo(() => {
     const gradeNum = grade ? Number(grade) : null
     return subjectTopics.filter((topic) => {
-      if (domain && topic.domain !== domain) return false
+      if (clusterParent && topic.cluster_parent !== clusterParent) return false
       if (gradeNum !== null && topic.grade !== gradeNum) return false
       return true
     })
-  }, [subjectTopics, domain, grade])
+  }, [subjectTopics, clusterParent, grade])
 
-  const chapters = useMemo(() => {
-    const map = new Map<string, { chapter: string; grade: number | null; count: number }>()
-    for (const topic of scopedTopics) {
-      if (!topic.chapter) continue
-      const entry = map.get(topic.chapter)
-      if (entry) entry.count += 1
-      else map.set(topic.chapter, { chapter: topic.chapter, grade: topic.grade, count: 1 })
-    }
-    return Array.from(map.values()).sort(
-      (a, b) => (a.grade ?? 99) - (b.grade ?? 99) || a.chapter.localeCompare(b.chapter, 'zh-CN'),
-    )
-  }, [scopedTopics])
+  const clusterList = useMemo(
+    () => (clusters.data ?? []).filter((item) => !clusterParent || item.parent === clusterParent),
+    [clusters.data, clusterParent],
+  )
+  const activeCluster: TaxonomyCluster | undefined = clusterList.find(
+    (item) => item.id === clusterId,
+  )
 
   const filtered = useMemo(() => {
     const keyword = q.trim()
     return scopedTopics.filter((topic) => {
-      if (chapter && topic.chapter !== chapter) return false
+      if (activeCluster && topic.cluster !== activeCluster.name) return false
       if (!keyword) return true
       return `${topic.name} ${topic.chapter ?? ''}`.includes(keyword)
     })
-  }, [scopedTopics, chapter, q])
+  }, [scopedTopics, activeCluster, q])
 
+  // 树形视图按年级合并，单元顺序不参与分组
   const treeGroups = useMemo(() => {
     const map = new Map<string, TaxonomyTopic[]>()
     for (const topic of filtered) {
       const book = topic.grade != null && topic.grade >= 10 ? bookOf(topic.chapter) : null
-      const label = `${gradeLabel(topic.grade, book)} · ${chapterLabel(topic.grade, topic.chapter)}`
+      const label = gradeLabel(topic.grade, book)
       const list = map.get(label)
       if (list) list.push(topic)
       else map.set(label, [topic])
@@ -323,15 +317,16 @@ export default function KnowledgeGraph() {
     if (mode === 'local') {
       return selectedId ? { focus: selectedId, depth: 1 } : undefined
     }
+    if (!subject) return undefined
     return {
-      subject: subject || undefined,
-      domain: domain || undefined,
+      subject,
+      parent: clusterParent || undefined,
       grade: grade ? Number(grade) : undefined,
-      chapter: chapter || undefined,
+      cluster: clusterId || undefined,
       q: q.trim() || undefined,
       limit: 160,
     }
-  }, [mode, selectedId, subject, domain, grade, chapter, q])
+  }, [mode, selectedId, subject, clusterParent, grade, clusterId, q])
 
   const graph = useTaxonomyGraph(graphParams)
 
@@ -352,7 +347,14 @@ export default function KnowledgeGraph() {
       ? selectedId
         ? localTitle
         : '主干视图'
-      : `${SUBJECT_LABELS[subject] ?? '全部'} · ${chapter || '图谱总览'}`
+      : activeCluster
+        ? `${SUBJECT_LABELS[subject] ?? '全部'} · ${activeCluster.parent} / ${activeCluster.name}`
+        : `${SUBJECT_LABELS[subject] ?? '全部'} · ${
+            clusterParent ||
+            (grade
+              ? gradeLabel(Number(grade), gradeFacets.find(([v]) => String(v) === grade)?.[1].book)
+              : '图谱总览')
+          }`
   const canvasMeta =
     mode === 'local'
       ? selectedId
@@ -378,108 +380,133 @@ export default function KnowledgeGraph() {
         <div className="kg-side-head">
           <div className="kg-eyebrow">KNOWLEDGE GRAPH</div>
           <h1>图谱浏览</h1>
-          <p>按学科、学段与章节浏览知识结构</p>
+          <p>按学科、主题与年级浏览知识结构</p>
         </div>
 
         <div className="kg-side-body">
           <div className="kg-section">
-            <div className="kg-section-title">
-              学科 <span className="kg-count">{subjectFacets.length} 个</span>
-            </div>
-            <div className="kg-tree-list">
+            <div className="kg-section-title">学科</div>
+            <select
+              value={subject}
+              onChange={(event) => {
+                setSubject(event.target.value)
+                setClusterParent('')
+                setGrade('')
+                setClusterId('')
+                setOpenChapters({})
+                setToolSearch('')
+              }}
+              className="kg-select"
+            >
+              <option value="">请选择学科</option>
               {(subjectFacets.length
                 ? subjectFacets
                 : Object.keys(SUBJECT_LABELS).map((key) => [key, 0] as [string, number])
               ).map(([key, count]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`kg-tree-item${subject === key ? ' active' : ''}`}
-                  onClick={() => {
-                    setSubject(key)
-                    setDomain('')
-                    setGrade('')
-                    setChapter('')
-                  }}
-                >
-                  <span className="kg-tree-dot" />
-                  <span className="kg-tree-label">{SUBJECT_LABELS[key] ?? key}</span>
-                  <span className="kg-count">{count}</span>
-                </button>
+                <option key={key} value={key}>
+                  {SUBJECT_LABELS[key] ?? key}（{count}）
+                </option>
               ))}
-            </div>
+            </select>
           </div>
 
-          <div className="kg-section">
-            <div className="kg-section-title">筛选</div>
-            <div className="kg-filter">
-              <input
-                value={q}
-                onChange={(event) => setQ(event.target.value)}
-                placeholder="搜索知识点 / 章节"
-                className="kg-input"
-              />
-              <select
-                value={grade}
-                onChange={(event) => {
-                  setGrade(event.target.value)
-                  setChapter('')
-                }}
-                className="kg-select"
-              >
-                <option value="">全部学段</option>
-                {gradeFacets.map(([value, info]) => (
-                  <option key={value} value={value}>
-                    {gradeLabel(value, info.book)}（{info.count}）
-                  </option>
-                ))}
-              </select>
-              <select
-                value={domain}
-                onChange={(event) => {
-                  setDomain(event.target.value)
-                  setChapter('')
-                }}
-                className="kg-select"
-              >
-                <option value="">全部领域</option>
-                {domainFacets.map(([value, count]) => (
-                  <option key={value} value={value}>
-                    {value}（{count}）
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          {subject && (
+            <>
+              <div className="kg-section">
+                <div className="kg-section-title">筛选</div>
+                <div className="kg-filter">
+                  <input
+                    value={q}
+                    onChange={(event) => setQ(event.target.value)}
+                    placeholder="搜索知识点"
+                    className="kg-input"
+                  />
+                  <select
+                    value={clusterParent}
+                    onChange={(event) => {
+                      setClusterParent(event.target.value)
+                      setClusterId('')
+                    }}
+                    className="kg-select"
+                  >
+                    <option value="">全部一级簇</option>
+                    {primaryClusters.map(([value, count]) => (
+                      <option key={value} value={value}>
+                        {value}（{count}）
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
 
-          <div className="kg-section">
-            <div className="kg-section-title">
-              章节 <span className="kg-count">{chapters.length} 个</span>
+          {subject && clusterParent && (
+            <div className="kg-section">
+              <div className="kg-section-title">
+                二级簇 <span className="kg-count">{clusterList.length} 个</span>
+              </div>
+              <div className="kg-tree-list">
+                {clusterList.length > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      className={`kg-tree-item${clusterId ? '' : ' active'}`}
+                      onClick={() => setClusterId('')}
+                    >
+                      <span className="kg-tree-label">全部二级簇</span>
+                      <span className="kg-count">
+                        {clusterList.reduce((sum, item) => sum + item.count, 0)}
+                      </span>
+                    </button>
+                    {clusterList.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`kg-tree-item${clusterId === item.id ? ' active' : ''}`}
+                        title={`${item.parent} / ${item.name}`}
+                        onClick={() => setClusterId(clusterId === item.id ? '' : item.id)}
+                      >
+                        <span className="kg-tree-label">{item.name}</span>
+                        <span className="kg-count">{item.count}</span>
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <div className="kg-count kg-empty-row">该一级簇暂无二级分组</div>
+                )}
+              </div>
             </div>
+          )}
+
+          {subject && (
+            <div className="kg-section">
+              <div className="kg-section-title">
+                年级 <span className="kg-count">{gradeFacets.length} 个</span>
+              </div>
             <div className="kg-tree-list">
               <button
                 type="button"
-                className={`kg-tree-item${chapter ? '' : ' active'}`}
-                onClick={() => setChapter('')}
+                className={`kg-tree-item${grade ? '' : ' active'}`}
+                onClick={() => setGrade('')}
               >
-                <span className="kg-tree-label">全部章节</span>
-                <span className="kg-count">{scopedTopics.length}</span>
+                <span className="kg-tree-label">全部年级</span>
+                <span className="kg-count">{subjectTopics.length}</span>
               </button>
-              {chapters.map((item) => (
+              {gradeFacets.map(([value, info]) => (
                 <button
-                  key={item.chapter}
+                  key={value}
                   type="button"
-                  className={`kg-tree-item${chapter === item.chapter ? ' active' : ''}`}
-                  title={item.chapter}
-                  onClick={() => setChapter(chapter === item.chapter ? '' : item.chapter)}
+                  className={`kg-tree-item${grade === String(value) ? ' active' : ''}`}
+                  onClick={() => setGrade(grade === String(value) ? '' : String(value))}
                 >
-                  <span className="kg-tree-label">{chapterLabel(item.grade, item.chapter)}</span>
-                  <span className="kg-count">{item.count}</span>
+                  <span className="kg-tree-label">{gradeLabel(value, info.book)}</span>
+                  <span className="kg-count">{info.count}</span>
                 </button>
               ))}
-              {!chapters.length && <div className="kg-count kg-empty-row">没有匹配的章节</div>}
             </div>
           </div>
+          )}
         </div>
 
         <div className="kg-side-foot">
@@ -501,7 +528,14 @@ export default function KnowledgeGraph() {
       </aside>
 
       <section className="kg-panel kg-workspace">
-        <div className="kg-toolbar">
+        {!subject ? (
+          <div className="kg-choose">
+            <strong>请选择学科</strong>
+            <span>在左侧选择学科后，这里会显示对应的图谱视图与树形视图。</span>
+          </div>
+        ) : (
+          <>
+            <div className="kg-toolbar">
           <div className="kg-toolbar-left">
             <div className="kg-view-toggle">
               <button
@@ -694,9 +728,11 @@ export default function KnowledgeGraph() {
           )}
 
           <div className="kg-hint">
-            {view === 'graph' ? '单击节点查看详情 · 拖动平移 · 滚轮缩放' : '展开章节查看知识点 · 单击选中'}
+            {view === 'graph' ? '单击节点查看详情 · 拖动平移 · 滚轮缩放' : '展开年级查看知识点 · 单击选中'}
           </div>
         </div>
+          </>
+        )}
       </section>
 
       <aside className="kg-panel kg-details">
@@ -709,7 +745,7 @@ export default function KnowledgeGraph() {
           {!selectedId && (
             <div className="kg-details-empty">
               请选择一个知识点节点。
-              <span>也可以从左侧章节或题目详情的知识点跳转进入。</span>
+              <span>也可以从左侧年级/主题或题目详情的知识点跳转进入。</span>
             </div>
           )}
           {selectedId && detail.isLoading && (
@@ -718,7 +754,7 @@ export default function KnowledgeGraph() {
           {selectedId && detail.isError && (
             <div className="kg-details-empty">
               该知识点不在图谱中。
-              <span>可能来自手工标签或种子词表，尚未关联到学科图谱；请从左侧章节或图中选择其他知识点。</span>
+              <span>可能来自手工标签或种子词表，尚未关联到学科图谱；请从左侧年级/主题或图中选择其他知识点。</span>
             </div>
           )}
           {detail.data && (

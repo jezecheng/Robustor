@@ -10,6 +10,8 @@ export type TaxonomyTopic = {
   semester: string | null
   chapter: string | null
   topic_type: string | null
+  cluster: string | null
+  cluster_parent: string | null
 }
 
 export type TaxonomyNeighbor = TaxonomyTopic & {
@@ -64,6 +66,8 @@ export type TaxonomyTopicParams = {
   domain?: string
   grade?: number
   q?: string
+  cluster?: string
+  parent?: string
 }
 
 export type TaxonomyGraphParams = TaxonomyTopicParams & {
@@ -71,6 +75,14 @@ export type TaxonomyGraphParams = TaxonomyTopicParams & {
   focus?: string
   depth?: number
   limit?: number
+}
+
+export type TaxonomyCluster = {
+  id: string
+  subject: string
+  parent: string
+  name: string
+  count: number
 }
 
 export function getTaxonomySummary() {
@@ -82,6 +94,8 @@ export function listTaxonomyTopics(params: TaxonomyTopicParams = {}) {
   if (params.subject) search.set('subject', params.subject)
   if (params.domain) search.set('domain', params.domain)
   if (params.grade !== undefined) search.set('grade', String(params.grade))
+  if (params.cluster) search.set('cluster', params.cluster)
+  if (params.parent) search.set('parent', params.parent)
   if (params.q?.trim()) search.set('q', params.q.trim())
   const qs = search.toString()
   return apiFetch<TaxonomyTopic[]>(`/taxonomy/topics${qs ? `?${qs}` : ''}`)
@@ -91,12 +105,22 @@ export function getTaxonomyTopic(tagId: string) {
   return apiFetch<TaxonomyDetail>(`/taxonomy/topics/${tagId}`)
 }
 
+export function listTaxonomyClusters(subject?: string, parent?: string) {
+  const search = new URLSearchParams()
+  if (subject) search.set('subject', subject)
+  if (parent) search.set('parent', parent)
+  const qs = search.toString()
+  return apiFetch<TaxonomyCluster[]>(`/taxonomy/clusters${qs ? `?${qs}` : ''}`)
+}
+
 export function getTaxonomyGraph(params: TaxonomyGraphParams = {}) {
   const search = new URLSearchParams()
   if (params.subject) search.set('subject', params.subject)
   if (params.domain) search.set('domain', params.domain)
   if (params.grade !== undefined) search.set('grade', String(params.grade))
   if (params.chapter) search.set('chapter', params.chapter)
+  if (params.cluster) search.set('cluster', params.cluster)
+  if (params.parent) search.set('parent', params.parent)
   if (params.q?.trim()) search.set('q', params.q.trim())
   if (params.focus) search.set('focus', params.focus)
   if (params.depth !== undefined) search.set('depth', String(params.depth))
@@ -119,6 +143,14 @@ export function useTaxonomyTopics(params: TaxonomyTopicParams) {
   return useQuery({
     queryKey: ['taxonomy', 'topics', params],
     queryFn: () => listTaxonomyTopics(params),
+  })
+}
+
+export function useTaxonomyClusters(subject?: string, parent?: string) {
+  return useQuery({
+    queryKey: ['taxonomy', 'clusters', subject, parent],
+    queryFn: () => listTaxonomyClusters(subject, parent),
+    enabled: Boolean(subject),
   })
 }
 
