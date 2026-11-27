@@ -31,6 +31,8 @@ RUN pip install --no-cache-dir -i https://mirrors.cloud.tencent.com/pypi/simple 
 
 COPY apps/api /app/apps/api
 COPY scripts /app/scripts
+# 知识图谱数据（topics/dependencies/meta），启动时由 app.taxonomy 导入 tag/tag_edge
+COPY taxonomy /app/taxonomy
 COPY --from=web /build/dist /app/apps/web/dist
 
 RUN mkdir -p /app/data
